@@ -10,6 +10,9 @@ Implementation of a Telegram-based menfess (anonymous confession) system as outl
 - MySQL database storage with InnoDB engine
 - Logging and error handling
 - Command interface for users and administrators
+- Webhook support for production deployments
+- Automatic queuing with 1-minute interval between posts
+- User notifications with queue position and estimated wait time
 
 ## Setup
 
@@ -26,6 +29,8 @@ Implementation of a Telegram-based menfess (anonymous confession) system as outl
    DB_NAME=menfess_bot
    DB_USERNAME=root
    DB_PASSWORD=
+   WEBHOOK_URL=https://yourdomain.com/botmenfess  # Required for webhook mode
+   USE_WEBHOOK=true  # Set to true for webhook mode, false for polling mode
    ```
 
 3. Set up the database:
@@ -40,9 +45,15 @@ Implementation of a Telegram-based menfess (anonymous confession) system as outl
    - Get the channel ID (can be obtained by forwarding a message from the channel to @userinfobot)
 
 5. Run the bot:
-   ```bash
-   php index.php
-   ```
+   - For development/polling mode:
+     ```bash
+     php index.php
+     ```
+   - For production/webhook mode:
+     ```bash
+     php index.php  # This will set up the webhook
+     ```
+     Then configure your web server to route requests to `webhook.php`
 
 ## Usage
 
@@ -51,6 +62,11 @@ Users interact with the bot via private messages:
 - Use `/start` for welcome message
 - Use `/help` for usage instructions
 - Use `/status` to see submission statistics
+
+The bot now provides users with:
+- Their position in the queue
+- Estimated time until their menfess will be posted
+- Confirmation that their message has been received
 
 Administrators can moderate submissions through the bot interface (implementation would need to be extended for admin commands).
 
@@ -71,9 +87,24 @@ Built with:
 - Monolog for logging
 - vlucas/phpdotenv for environment variable management
 
-The implementation follows the workflow outlined in the plan:
+The implementation follows the workflow outlined in the plan with enhancements:
 1. User sends message to bot
-2. Bot stores message in database with 'pending' status
-3. Admin reviews and approves/rejects submission
-4. Approved submissions are posted to the Telegram channel
-5. Bot maintains anonymity by not storing or revealing user information
+2. Bot stores message in database with 'pending' status and calculates queue position
+3. Bot informs user of their queue position and estimated wait time
+4. After 1 minute intervals (adjusted for queue), bot automatically approves and posts the oldest pending submission
+5. Posted submission is recorded in channel_posts table
+6. Bot maintains anonymity by not storing or revealing user information
+
+## Webhook Setup
+
+For production use, it's recommended to use webhooks instead of polling:
+
+1. Set `USE_WEBHOOK=true` in your `.env` file
+2. Set `WEBHOOK_URL` to your domain where the bot is hosted (without the webhook.php path)
+3. Run `php index.php` once to set up the webhook with Telegram
+4. Configure your web server to route HTTPS requests to `/webhook.php` to this script
+5. Ensure your server has a valid SSL certificate (Telegram requires HTTPS for webhooks)
+
+Example webhook URL structure:
+- WEBHOOK_URL: https://example.com/botmenfess
+- Telegram will send updates to: https://example.com/botmenfess/webhook.php

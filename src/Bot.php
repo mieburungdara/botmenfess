@@ -27,6 +27,7 @@ class MenfessBot
         $this->botToken = $_ENV['TELEGRAM_BOT_TOKEN'];
         $this->targetChannelId = $_ENV['TARGET_CHANNEL_ID'];
         $this->postingInterval = 60; // 60 seconds between posts
+        $this->webhookUrl = $_ENV['WEBHOOK_URL'] ?? '';
 
         // Initialize Telegram Bot API
         $this->botApi = new BotApi($this->botToken);
@@ -48,6 +49,46 @@ class MenfessBot
         
         // Initialize last processed time
         $this->lastProcessedTime = time();
+    }
+    
+    /**
+     * Set up the webhook for the bot
+     * @return bool True if webhook was set successfully
+     */
+    public function setWebhook()
+    {
+        if (empty($this->webhookUrl)) {
+            $this->logger->error('WEBHOOK_URL not set in environment variables');
+            return false;
+        }
+        
+        $webhookUrl = $this->webhookUrl . '/webhook.php';
+        $result = $this->botApi->setWebhook(['url' => $webhookUrl]);
+        
+        if ($result) {
+            $this->logger->info("Webhook set successfully to {$webhookUrl}");
+            return true;
+        } else {
+            $this->logger->error('Failed to set webhook');
+            return false;
+        }
+    }
+    
+    /**
+     * Remove the webhook (use getUpdates instead)
+     * @return bool True if webhook was removed successfully
+     */
+    public function removeWebhook()
+    {
+        $result = $this->botApi->setWebhook(['url' => '']);
+        
+        if ($result) {
+            $this->logger->info("Webhook removed successfully");
+            return true;
+        } else {
+            $this->logger->error('Failed to remove webhook');
+            return false;
+        }
     }
 
     public function start()
@@ -108,6 +149,126 @@ class MenfessBot
 
         // Handle regular messages as submissions
         $this->handleSubmission($message);
+    }
+    
+    // Method to handle private message from webhook array data
+    private function handlePrivateMessageFromArray($message)
+    {
+        $userId = $message['from']['id'];
+        $text = $message['text'];
+        
+        $this->logger->info("Received message from user {$userId}: {$text}");
+
+        // Handle commands
+        if (strpos($text, '/') === 0) {
+            $this->handleCommandFromArray($message);
+            return;
+        }
+
+        // Handle regular messages as submissions
+        $this->handleSubmissionFromArray($message);
+    }
+    
+    // Method to handle command from webhook array data
+    private function handleCommandFromArray($message)
+    {
+        $command = strtolower($message['text']);
+        $chatId = $message['chat']['id'];
+        
+        switch ($command) {
+            case '/start':
+                $this->botApi->sendMessage($chatId, "Selamat datang di Bot Menfess!\n\nKirim pesan anonymous Anda ke bot ini, dan jika disetujui, akan diposting ke channel menfess.");
+                break;
+                
+            case '/help':
+                $helpText = "Panduan Penggunaan Bot Menfess:\n\n";
+                $helpText .= "/start - Memulai bot\n";
+                $helpText .= "/help - Menampilkan panduan ini\n";
+                $helpText .= "/status - Melihat status bot\n\n";
+                $helpText .= "Kirim pesan apa saja untuk membuat menfess anonymous.";
+                $this->botApi->sendMessage($chatId, $helpText);
+                break;
+                
+            case '/status':
+                $stats = $this->getSubmissionStats();
+                $statusText = "Status Bot Menfess:\n\n";
+                $statusText .= "Pending: {$stats['pending']}\n";
+                $statusText .= "Approved: {$stats['approved']}\n";
+                $statusText .= "Rejected: {$stats['rejected']}\n";
+                $statusText .= "Posted: {$stats['posted']}\n";
+                $this->botApi->sendMessage($chatId, $statusText);
+                break;
+                
+            default:
+                $this->botApi->sendMessage($chatId, "Perintah tidak dikenali. Ketik /help untuk melihat panduan.");
+        }
+    }
+    
+    // Method to handle submission from webhook array data
+    private function handleSubmissionFromArray($message)
+    {
+        $userId = $message['from']['id'];
+        $text = $message['text'];
+        
+        // Store submission in database
+        $stmt = $this->connection->prepare("INSERT INTO submissions (message_text, submitted_at) VALUES (?, NOW())");
+        $stmt->bindValue(1, $text);
+        $stmt->execute();
+        
+        $submissionId = (int)$this->connection->lastInsertId();
+        
+        $this->logger->info("Stored submission {$submissionId} from user {$userId}");
+        
+        // Calculate queue position
+        $queuePosition = $this->getQueuePosition($submissionId);
+        
+        // Calculate estimated wait time
+        $estimatedWaitSeconds = $queuePosition * $this->postingInterval;
+        $waitTimeString = $this->formatWaitTime($estimatedWaitSeconds);
+        
+        // Send acknowledgment to user with queue and time information
+        $responseMessage = "Pesan diterima! ";
+        if ($queuePosition > 0) {
+            $responseMessage .= "Anda berada di antrian ke-{$queuePosition}. ";
+            $responseMessage .= "Estimasi waktu penayangan: {$waitTimeString}. ";
+        } else {
+            $responseMessage .= "Menfess Anda akan diposting dalam approximasi {$waitTimeString}. ";
+        }
+        $responseMessage .= "Menfess akan diposting secara berurutan dengan jeda 1 menit antar posting.";
+        
+        $this->botApi->sendMessage($message['chat']['id'], $responseMessage);
+        
+        // Notify admins about new submission (in a real implementation, you'd have an admin system)
+        // For now, we'll just log it
+        $this->logger->info("New submission {$submissionId} awaiting auto-approval. Queue position: {$queuePosition}, Estimated wait: {$waitTimeString}");
+    }
+    
+    // Method to handle callback query from webhook array data
+    private function handleCallbackQueryFromArray($callbackQuery)
+    {
+        $data = $callbackQuery['data'];
+        $messageId = $callbackQuery['message']['message_id'];
+        $chatId = $callbackQuery['message']['chat']['id'];
+        
+        // Parse callback data: action_submissionId
+        if (strpos($data, '_') !== false) {
+            $parts = explode('_', $data);
+            $action = $parts[0];
+            $submissionId = (int)$parts[1];
+            
+            switch ($action) {
+                case 'approve':
+                    $this->approveSubmission($submissionId, $callbackQuery['from']['username']);
+                    break;
+                case 'reject':
+                    $this->rejectSubmission($submissionId, $callbackQuery['from']['username']);
+                    break;
+            }
+            
+            // Update the message to show it's been processed
+            // Note: For simplicity, we're not implementing editMessageReplyMarkup for array-based updates
+            // In a full implementation, you would properly handle this
+        }
     }
 
     private function handleCommand($message)
