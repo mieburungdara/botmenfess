@@ -4,7 +4,27 @@
 CREATE DATABASE IF NOT EXISTS menfess_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE menfess_bot;
 
+-- users table: stores information about users who interact with the bot
+-- Note: This table is NOT linked to submissions to maintain anonymity
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    telegram_id BIGINT NOT NULL UNIQUE,
+    username VARCHAR(255) NULL,
+    first_name VARCHAR(255) NULL,
+    last_name VARCHAR(255) NULL,
+    language_code VARCHAR(10) NULL,
+    is_bot BOOLEAN DEFAULT FALSE,
+    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    submission_count INT DEFAULT 0,
+    is_blocked BOOLEAN DEFAULT FALSE,
+    blocked_at TIMESTAMP NULL,
+    blocked_by VARCHAR(255) NULL,
+    UNIQUE KEY idx_telegram_id (telegram_id)
+) ENGINE=InnoDB;
+
 -- submissions table: stores incoming messages from users
+-- Note: No user identifiers stored here to maintain anonymity
 CREATE TABLE IF NOT EXISTS submissions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     message_text TEXT NOT NULL,

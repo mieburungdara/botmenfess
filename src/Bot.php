@@ -136,10 +136,18 @@ class MenfessBot
 
     private function handlePrivateMessage($message)
     {
-        $userId = $message->getFrom()->getId();
-        $text = $message->getText();
+        $user = $message->getFrom();
+        $userId = $user->getId();
+        $username = $user->getUsername();
+        $firstName = $user->getFirstName();
+        $lastName = $user->getLastName();
+        $languageCode = $user->getLanguageCode();
+        $isBot = $user->getIsBot();
         
         $this->logger->info("Received message from user {$userId}: {$text}");
+
+        // Store or update user information (for analytics, not for breaking anonymity)
+        $this->storeUserInfo($userId, $username, $firstName, $lastName, $languageCode, $isBot);
 
         // Handle commands
         if (strpos($text, '/') === 0) {
@@ -154,10 +162,20 @@ class MenfessBot
     // Method to handle private message from webhook array data
     private function handlePrivateMessageFromArray($message)
     {
-        $userId = $message['from']['id'];
+        $user = $message['from'];
+        $userId = $user['id'];
+        $username = $user['username'] ?? null;
+        $firstName = $user['first_name'] ?? null;
+        $lastName = $user['last_name'] ?? null;
+        $languageCode = $user['language_code'] ?? null;
+        $isBot = $user['is_bot'] ?? false;
+        
         $text = $message['text'];
         
         $this->logger->info("Received message from user {$userId}: {$text}");
+
+        // Store or update user information (for analytics, not for breaking anonymity)
+        $this->storeUserInfo($userId, $username, $firstName, $lastName, $languageCode, $isBot);
 
         // Handle commands
         if (strpos($text, '/') === 0) {
@@ -207,7 +225,13 @@ class MenfessBot
     // Method to handle submission from webhook array data
     private function handleSubmissionFromArray($message)
     {
-        $userId = $message['from']['id'];
+        $user = $message['from'];
+        $userId = $user['id'];
+        $username = $user['username'] ?? null;
+        $firstName = $user['first_name'] ?? null;
+        $lastName = $user['last_name'] ?? null;
+        $languageCode = $user['language_code'] ?? null;
+        $isBot = $user['is_bot'] ?? false;
         $text = $message['text'];
         
         // Store submission in database
@@ -218,6 +242,9 @@ class MenfessBot
         $submissionId = (int)$this->connection->lastInsertId();
         
         $this->logger->info("Stored submission {$submissionId} from user {$userId}");
+        
+        // Store or update user information (for analytics, not for breaking anonymity)
+        $this->storeUserInfo($userId, $username, $firstName, $lastName, $languageCode, $isBot);
         
         // Calculate queue position
         $queuePosition = $this->getQueuePosition($submissionId);
@@ -341,6 +368,58 @@ class MenfessBot
         // Notify admins about new submission (in a real implementation, you'd have an admin system)
         // For now, we'll just log it
         $this->logger->info("New submission {$submissionId} awaiting auto-approval. Queue position: {$queuePosition}, Estimated wait: {$waitTimeString}");
+    }
+    
+    /**
+     * Store or update user information for analytics purposes
+     * Note: This data is NOT linked to submissions to maintain anonymity
+     */
+    private function storeUserInfo($telegramId, $username, $firstName, $lastName, $languageCode, $isBot)
+    {
+        try {
+            // Check if user already exists
+            $stmt = $this->connection->prepare("SELECT id FROM users WHERE telegram_id = ?");
+            $stmt->bindValue(1, $telegramId);
+            $stmt->execute();
+            $user = $stmt->fetch();
+            
+            if ($user) {
+                // Update existing user
+                $stmt = $this->connection->prepare("UPDATE users SET 
+                                                    username = ?, 
+                                                    first_name = ?, 
+                                                    last_name = ?, 
+                                                    language_code = ?, 
+                                                    is_bot = ?, 
+                                                    last_seen = NOW(),
+                                                    submission_count = submission_count + 1
+                                                  WHERE telegram_id = ?");
+                $stmt->bindValue(1, $username);
+                $stmt->bindValue(2, $firstName);
+                $stmt->bindValue(3, $lastName);
+                $stmt->bindValue(4, $languageCode);
+                $stmt->bindValue(5, $isBot ? 1 : 0);
+                $stmt->bindValue(6, $telegramId);
+                $stmt->execute();
+            } else {
+                // Insert new user
+                $stmt = $this->connection->prepare("INSERT INTO users 
+                                                    (telegram_id, username, first_name, last_name, language_code, is_bot, submission_count)
+                                                  VALUES (?, ?, ?, ?, ?, ?, 1)");
+                $stmt->bindValue(1, $telegramId);
+                $stmt->bindValue(2, $username);
+                $stmt->bindValue(3, $firstName);
+                $stmt->bindValue(4, $lastName);
+                $stmt->bindValue(5, $languageCode);
+                $stmt->bindValue(6, $isBot ? 1 : 0);
+                $stmt->execute();
+            }
+            
+            $this->logger->info("Stored/updated user info for telegram_id {$telegramId}");
+        } catch (\Exception $e) {
+            $this->logger->error("Error storing user info: " . $e->getMessage());
+            // Don't throw the exception as we don't want to break the submission flow
+        }
     }
 
     private function handleCallbackQuery($callbackQuery)

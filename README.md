@@ -72,11 +72,14 @@ Administrators can moderate submissions through the bot interface (implementatio
 
 ## Database Schema
 
-The bot uses two tables as specified in the plan:
+The bot uses three tables:
+- `users`: Stores information about users who interact with the bot (for analytics only)
 - `submissions`: Stores incoming messages with status tracking
 - `channel_posts`: Tracks which submissions have been posted to the channel
 
-Both tables use the InnoDB engine for ACID compliance and foreign key support.
+**Important Note on User Anonymity**: While the bot stores user information in the `users` table for analytics purposes, this data is **NOT** linked to submissions. The `submissions` table contains only the message text and metadata, ensuring complete anonymity of menfess posts.
+
+All tables use the InnoDB engine for ACID compliance and foreign key support.
 
 ## Implementation Details
 
