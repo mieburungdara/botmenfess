@@ -1,0 +1,17 @@
+{
+    "name": "botmenfess/telegram-menfess-bot",
+    "description": "Telegram bot for anonymous menfess/confession system",
+    "type": "project",
+    "require": {
+        "telegram-bot/api": "^2.3",
+        "monolog/monolog": "^2.0",
+        "vlucas/phpdotenv": "^5.0"
+    },
+    "authors": [
+        {
+            "name": "Administrator",
+            "email": "admin@example.com"
+        }
+    ],
+    "minimum-stability": "dev"
+}
