@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Menfess - Web App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --tg-theme-bg-color: #ffffff;
+            --tg-theme-text-color: #000000;
+            --tg-theme-hint-color: #999999;
+            --tg-theme-link-color: #2678b6;
+            --tg-theme-button-color: #3390ec;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-secondary-bg-color: #f4f4f5;
+        }
+        
+        body {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .bg-tg-secondary {
+            background-color: var(--tg-theme-secondary-bg-color);
+        }
+        
+        .btn-tg {
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+        }
+
+        .error-message {
+            color: #dc2626;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+    <div class="max-w-md mx-auto p-4">
+        <!-- Header -->
+        <div class="text-center mb-8 pt-6">
+            <div class="w-20 h-20 mx-auto bg-purple-500 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold mb-2">Bot Menfess</h1>
+            <p class="text-gray-500">Kirim pesan anonymous dengan mudah</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden error-message mb-4"></div>
+
+        <!-- Form Input -->
+        <div class="bg-tg-secondary rounded-xl p-5 mb-6">
+            <label class="block mb-2 font-medium">Pesan Menfess Anda:</label>
+            <textarea 
+                id="messageInput" 
+                rows="5" 
+                placeholder="Tulis pesan anonymous disini..."
+                class="w-full p-3 rounded-lg border border-gray-200 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                maxlength="1000"
+            ></textarea>
+            <div class="flex justify-between mt-2 text-sm text-gray-500">
+                <span>Maksimal 1000 karakter</span>
+                <span id="charCount">0 / 1000</span>
+            </div>
+        </div>
+
+        <!-- Stats Card -->
+        <div class="bg-tg-secondary rounded-xl p-5 mb-6">
+            <h3 class="font-medium mb-4">Status Bot Hari Ini</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-purple-600" id="totalMessages">-</div>
+                    <div class="text-xs text-gray-500">Total Pesan</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-green-600" id="pendingCount">-</div>
+                    <div class="text-xs text-gray-500">Antrian</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-blue-600" id="approvedCount">-</div>
+                    <div class="text-xs text-gray-500">Disetujui</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-red-600" id="rejectedCount">-</div>
+                    <div class="text-xs text-gray-500">Ditolak</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button 
+            id="submitBtn" 
+            class="w-full btn-tg py-4 rounded-xl font-semibold text-lg transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+            ✉️ Kirim Pesan Menfess
+        </button>
+
+        <!-- Success Message -->
+        <div id="successMessage" class="hidden mt-6 bg-green-100 border border-green-300 text-green-700 p-4 rounded-xl text-center">
+            ✅ Pesan Anda telah terkirim! Pesan akan diposting secara berurutan.
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        
+        // Initialize Telegram Web App
+        tg.ready();
+        tg.expand();
+        
+        // Set main button
+        tg.MainButton.setText('Kirim Pesan');
+        tg.MainButton.onClick(submitMessage);
+        
+        // DOM Elements
+        const messageInput = document.getElementById('messageInput');
+        const charCount = document.getElementById('charCount');
+        const submitBtn = document.getElementById('submitBtn');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        // User info from Telegram
+        const user = tg.initDataUnsafe.user;
+
+        /**
+         * Show error message
+         */
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+            setTimeout(() => {
+                errorMessage.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Handle API errors with proper error messages
+         */
+        function handleApiError(error, fallbackMessage = 'Terjadi kesalahan') {
+            console.error('API Error:', error);
+            if (error instanceof SyntaxError && error.message.includes('JSON')) {
+                showError('Server mengembalikan respons tidak valid. Periksa server.');
+            } else if (error.message.includes('Failed to fetch')) {
+                showError('Tidak dapat terhubung ke server. Periksa koneksi internet.');
+            } else {
+                showError(fallbackMessage);
+            }
+        }
+        
+        // Character counter
+        messageInput.addEventListener('input', () => {
+            const length = messageInput.value.length;
+            charCount.textContent = `${length} / 1000`;
+            
+            if (length > 0 && length <= 1000) {
+                tg.MainButton.show();
+            } else {
+                tg.MainButton.hide();
+            }
+        });
+        
+        // Submit message function
+        async function submitMessage() {
+            const message = messageInput.value.trim();
+            
+            if (!message || message.length < 2) {
+                tg.showAlert('Pesan terlalu pendek, minimal 2 karakter');
+                return;
+            }
+            
+            if (message.length > 1000) {
+                tg.showAlert('Pesan terlalu panjang, maksimal 1000 karakter');
+                return;
+            }
+            
+            tg.MainButton.showProgress(true);
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('./submit.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        initData: tg.initData
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    successMessage.classList.remove('hidden');
+                    errorMessage.classList.add('hidden');
+                    messageInput.value = '';
+                    charCount.textContent = '0 / 1000';
+                    tg.MainButton.hide();
+                    
+                    setTimeout(() => {
+                        successMessage.classList.add('hidden');
+                    }, 5000);
+                    
+                    tg.HapticFeedback.notificationOccurred('success');
+                    
+                } else {
+                    showError(result.message || 'Gagal mengirim pesan');
+                    tg.HapticFeedback.notificationOccurred('error');
+                }
+                
+            } catch (error) {
+                handleApiError(error, 'Terjadi kesalahan saat mengirim pesan');
+                tg.HapticFeedback.notificationOccurred('error');
+            }
+            
+            tg.MainButton.showProgress(false);
+            submitBtn.disabled = false;
+        }
+        
+        // Load stats
+        let statsLoadAttempts = 0;
+        const MAX_STATS_ATTEMPTS = 5;
+
+        async function loadStats() {
+            if (statsLoadAttempts >= MAX_STATS_ATTEMPTS) {
+                console.warn('Max stats load attempts reached');
+                return;
+            }
+            statsLoadAttempts++;
+
+            try {
+                const response = await fetch('./api/stats.php');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const stats = await response.json();
+                
+                if (!stats.success) {
+                    throw new Error(stats.error || 'Stats API error');
+                }
+
+                document.getElementById('totalMessages').textContent = stats.total || 0;
+                document.getElementById('pendingCount').textContent = stats.pending || 0;
+                document.getElementById('approvedCount').textContent = stats.approved || 0;
+                document.getElementById('rejectedCount').textContent = stats.rejected || 0;
+                
+                // Reset attempts on success
+                statsLoadAttempts = 0;
+                
+            } catch (error) {
+                // Only show error after multiple failures to avoid noise during startup
+                if (statsLoadAttempts >= 3) {
+                    console.error('Failed to load stats:', error);
+                }
+            }
+        }
+        
+        // Button click handler
+        submitBtn.addEventListener('click', submitMessage);
+        
+        // Load stats on page load
+        loadStats();
+        
+        // Refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>

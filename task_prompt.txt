@@ -1,0 +1,56 @@
+Implementasi Fitur Monetisasi: Limit Menfess Per Hari Berdasarkan Tier
+
+## Konteks
+Bot Menfess ini adalah Telegram Bot menggunakan PHP + MySQL (library: telegram-bot/api). Saat ini user bisa mengirim unlimited menfess. Kita perlu menambahkan sistem limit harian berdasarkan tier untuk monetisasi.
+
+## File Penting
+- webhook.php - menangani incoming Telegram updates
+- index.php - setup webhook, polling mode
+- database_schema.sql - schema MySQL
+- public/webapp/index.html - web interface
+- composer.json - dependencies
+
+## Spesifikasi Implementasi
+
+### 1. Database: Tambah kolom untuk Tier dan Tracking Harian
+- Tambah kolom tier (ENUM: free, silver, gold) di tabel users
+- Buat tabel baru user_daily_usage: id, telegram_user_id, usage_date (DATE), submission_count (INT)
+- Limit default:
+  - Free: 3 menfess per hari
+  - Silver: 10 menfess per hari
+  - Gold: Unlimited (999)
+
+### 2. Validasi Limit Saat User Submit Menfess
+- Di webhook handler, saat user mengirim pesan:
+  1. Check tier user dan dapatkan daily limit
+  2. Hitung jumlah submission hari ini dari user_daily_usage
+  3. Jika sudah mencapai limit, kirim pesan error ke user dan tolak submission
+  4. Jika belum, lanjutkan proses submission dan increment counter
+- Pesan error: "Kamu sudah mencapai batas harian! Upgrade ke Premium untuk limit lebih banyak."
+
+### 3. Command Baru
+- /tier - Cek tier saat ini dan sisa limit harian
+- /upgrade - Tampilkan pilihan upgrade premium
+- /settier [user_id] [silver|gold|free] - Admin command untuk set tier user
+
+### 4. Placeholder untuk Integrasi Payment
+- Buat fungsi upgradeUserTier(userId, tier) yang bisa dipanggil
+- Siapkan struktur/config untuk payment gateway nantinya
+
+### 5. Update /status Command
+- Tampilkan limit harian dan sisa submission di output /status
+
+### 6. Update Web Interface (public/webapp/index.html)
+- Tambahkan display tier dan limit harian
+- Tambahkan section upgrade premium
+
+## Testing
+- Test free user diblokir setelah 3 submission dalam sehari
+- Test premium user dapat limit lebih tinggi
+- Test limit reset di tengah malam
+- Test semua command baru
+
+## Catatan Teknis
+- Gunakan timezone WIB (UTC+7)
+- Pastikan backward compatible: user existing otomatis jadi tier free
+- Jangan ubah core submission flow yang sudah berjalan

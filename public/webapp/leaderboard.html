@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="Leaderboard user paling aktif di Bot Menfess - lihat siapa yang paling banyak berkomentar">
+    <title>🏆 Leaderboard - Bot Menfess</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container pull-to-refresh">
+        <!-- Header -->
+        <div class="header">
+            <h1>🏆 Leaderboard</h1>
+            <p>User paling aktif berdasarkan komentar</p>
+        </div>
+
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-comments">0</div>
+                <div class="stat-label">Total Komentar</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-commenters">0</div>
+                <div class="stat-label">User Aktif</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-submissions">0</div>
+                <div class="stat-label">Menfess</div>
+            </div>
+        </div>
+
+        <!-- Personal Rank -->
+        <div id="personal-rank"></div>
+
+        <!-- Timeframe Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-timeframe="alltime" onclick="switchTab('alltime')">All-Time</button>
+            <button class="tab" data-timeframe="weekly" onclick="switchTab('weekly')">Minggu Ini</button>
+            <button class="tab" data-timeframe="monthly" onclick="switchTab('monthly')">Bulan Ini</button>
+        </div>
+
+        <!-- Leaderboard List -->
+        <div id="leaderboard-container"></div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div id="last-updated">Memuat data...</div>
+            <div style="margin-top:4px">
+                <a href="profile.html" style="color:var(--accent-color);text-decoration:none">Lihat Profil Saya →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <a href="leaderboard.html" class="nav-item active">
+            <span class="nav-icon">🏆</span>
+            <span>Leaderboard</span>
+        </a>
+        <a href="profile.html" class="nav-item">
+            <span class="nav-icon">👤</span>
+            <span>Profil</span>
+        </a>
+    </nav>
+
+    <script src="js/app.js"></script>
+    <script src="js/leaderboard.js"></script>
+</body>
+</html>

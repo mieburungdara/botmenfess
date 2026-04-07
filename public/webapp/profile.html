@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="Profil pengguna Bot Menfess - lihat statistik, badge, dan riwayat komentar kamu">
+    <title>Profil Saya - Bot Menfess</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container pull-to-refresh">
+        <!-- Profile Header -->
+        <div id="profile-header"></div>
+
+        <!-- Personal Rank -->
+        <div id="personal-rank"></div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-comments">0</div>
+                <div class="stat-label">Total Komentar</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="comment-velocity">0</div>
+                <div class="stat-label">Per Bulan</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="streak">0 hari</div>
+                <div class="stat-label">Streak</div>
+            </div>
+        </div>
+
+        <!-- Badges -->
+        <div class="card">
+            <div class="card-title">🏅 Badge Collection</div>
+            <div id="badges-container"></div>
+        </div>
+
+        <!-- Activity Heatmap -->
+        <div class="card">
+            <div class="card-title">🕐 Jam Aktif</div>
+            <div id="heatmap"></div>
+        </div>
+
+        <!-- Daily Activity -->
+        <div class="card">
+            <div class="card-title">📊 Aktivitas 30 Hari Terakhir</div>
+            <div id="daily-activity"></div>
+        </div>
+
+        <!-- Comment History -->
+        <div class="card">
+            <div class="card-title">💬 Riwayat Komentar</div>
+            <div id="comment-history"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <a href="leaderboard.html" style="color:var(--accent-color);text-decoration:none">← Kembali ke Leaderboard</a>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html>

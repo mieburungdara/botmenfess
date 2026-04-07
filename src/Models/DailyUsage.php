@@ -10,10 +10,11 @@ class DailyUsage {
         $this->db = $db;
     }
 
-    public function getTodayCount($uid) {
+    // Note: $uid here is telegram_id, converted via JOIN
+    public function getTodayCount($telegramId) {
         $sql = 'SELECT count FROM ' . $this->table . ' du INNER JOIN users u ON du.user_id = u.id WHERE u.telegram_id = ? AND du.usage_date = CURDATE()';
         $s = $this->db->prepare($sql);
-        $s->execute([$uid]);
+        $s->execute([$telegramId]);
         $r = $s->fetch(\PDO::FETCH_ASSOC);
         return $r ? (int)$r['count'] : 0;
     }

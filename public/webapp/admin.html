@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="Admin dashboard untuk mengelola Bot Menfess - monitor statistik dan kelola cache">
+    <title>Admin Dashboard - Bot Menfess</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container pull-to-refresh">
+        <!-- Header -->
+        <div class="header">
+            <h1>⚙️ Admin Dashboard</h1>
+            <p>Monitor dan kelola leaderboard</p>
+        </div>
+
+        <!-- Overview Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-users">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="shadow-banned">0</div>
+                <div class="stat-label">Shadow Banned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-comments">0</div>
+                <div class="stat-label">Total Komentar</div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-submissions">0</div>
+                <div class="stat-label">Total Menfess</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="comments-today">0</div>
+                <div class="stat-label">Komentar Hari Ini</div>
+            </div>
+        </div>
+
+        <!-- Cache Management -->
+        <div class="admin-section">
+            <h2>🗄️ Cache Management</h2>
+            <div id="cache-status"></div>
+            <div style="margin-top:16px">
+                <button class="btn btn-primary" onclick="rebuildCache()">
+                    🔄 Rebuild Cache
+                </button>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="admin-section">
+            <h2>📋 Aktivitas Terbaru</h2>
+            <div id="recent-activity"></div>
+        </div>
+
+        <!-- User Management -->
+        <div class="admin-section">
+            <h2>👥 User Management</h2>
+            <div class="card">
+                <p style="color:var(--text-muted);font-size:14px">
+                    Gunakan command bot untuk shadow ban/unban user:<br>
+                    <code>/shadowban [user_id]</code> - Shadow ban user<br>
+                    <code>/unshadowban [user_id]</code> - Unshadow ban user
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <a href="leaderboard.html" style="color:var(--accent-color);text-decoration:none">← Kembali ke Leaderboard</a>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

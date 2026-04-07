@@ -38,9 +38,13 @@ try {
             if (strpos($txt, '/') === 0) {
                 $cmd = strtolower($txt);
                 if ($cmd === '/help' || $cmd === '/start') {
-                    $api->sendMessage($cid, "Panduan:\n\n/status - Lihat sisa limit\n/tiers - Lihat tier\n\nKirim pesan untuk membuat menfess.");
+                    $api->sendMessage($cid, "Panduan:\n\n/status - Lihat sisa limit\n/tiers - Lihat tier\n/leaderboard - Lihat leaderboard user aktif\n\nKirim pesan untuk membuat menfess.");
                 } elseif ($cmd === '/status') menfessHandleStatus($api, $cid, $uid, $pdo);
                 elseif ($cmd === '/tiers') menfessHandleTiers($api, $cid, $pdo);
+                elseif ($cmd === '/leaderboard') {
+                    $webappUrl = WEBAPP_URL . '/leaderboard.html';
+                    $api->sendMessage($cid, "🏆 Lihat leaderboard user paling aktif!\n\nKlik link di bawah untuk membuka leaderboard:\n" . $webappUrl);
+                }
                 else $api->sendMessage($cid, 'Perintah tidak dikenali. Ketik /help.');
             } else menfessHandleSubmit($api, $cid, $uid, $txt, $pdo);
         }

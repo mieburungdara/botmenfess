@@ -1,51 +1,56 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
+/**
+ * MenfessBot - Main Bot Class
+ * Fixed: Standardized to PDO, removed Doctrine DBAL dependency,
+ * added proper error handling, and removed duplicate dotenv loading
+ */
+
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use TelegramBot\Api\BotApi;
 use TelegramBot\Api\Types\Update;
-use Doctrine\DBAL\DriverManager;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
-use Dotenv\Dotenv;
 
 class MenfessBot
 {
     private $botApi;
-    private $connection;
+    private $pdo;
     private $logger;
     private $targetChannelId;
     private $botToken;
     private $lastProcessedTime;
     private $postingInterval;
+    private $webhookUrl;
 
     public function __construct()
     {
-        // Load environment variables
-        $dotenv = Dotenv::createImmutable(__DIR__ . '/..');
-        $dotenv->load();
+        // Load environment variables from config.php (single source of truth)
+        require_once __DIR__ . '/../config.php';
 
-        $this->botToken = $_ENV['TELEGRAM_BOT_TOKEN'];
-        $this->targetChannelId = $_ENV['TARGET_CHANNEL_ID'];
+        $this->botToken = TELEGRAM_BOT_TOKEN;
+        $this->targetChannelId = TARGET_CHANNEL_ID;
         $this->postingInterval = 60; // 60 seconds between posts
-        $this->webhookUrl = $_ENV['WEBHOOK_URL'] ?? '';
+        $this->webhookUrl = defined('WEBHOOK_URL') ? WEBHOOK_URL : '';
 
         // Initialize Telegram Bot API
         $this->botApi = new BotApi($this->botToken);
 
-        // Initialize database connection
-        $this->connection = DriverManager::getConnection([
-            'url' => sprintf(
-                'mysql://%s:%s@%s/%s',
-                $_ENV['DB_USERNAME'],
-                $_ENV['DB_PASSWORD'],
-                $_ENV['DB_HOST'],
-                $_ENV['DB_NAME']
-            )
-        ]);
+        // Initialize database connection using PDO (standardized)
+        $this->pdo = new PDO(
+            'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+            DB_USER,
+            DB_PASS
+        );
+        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 
         // Initialize logger
+        if (!is_dir(dirname(LOG_FILE))) {
+            mkdir(dirname(LOG_FILE), 0755, true);
+        }
         $this->logger = new Logger('menfess_bot');
-        $this->logger->pushHandler(new StreamHandler(__DIR__ . '/../bot.log', Logger::INFO));
+        $this->logger->pushHandler(new StreamHandler(LOG_FILE, Logger::INFO));
         
         // Initialize last processed time
         $this->lastProcessedTime = time();
@@ -62,14 +67,19 @@ class MenfessBot
             return false;
         }
         
-        $webhookUrl = $this->webhookUrl . '/webhook.php';
-        $result = $this->botApi->setWebhook(['url' => $webhookUrl]);
-        
-        if ($result) {
-            $this->logger->info("Webhook set successfully to {$webhookUrl}");
-            return true;
-        } else {
-            $this->logger->error('Failed to set webhook');
+        $webhookUrl = rtrim($this->webhookUrl, '/') . '/webhook.php';
+        try {
+            $result = $this->botApi->setWebhook(['url' => $webhookUrl]);
+            
+            if ($result) {
+                $this->logger->info("Webhook set successfully to {$webhookUrl}");
+                return true;
+            } else {
+                $this->logger->error('Failed to set webhook');
+                return false;
+            }
+        } catch (\Exception $e) {
+            $this->logger->error('Exception setting webhook: ' . $e->getMessage());
             return false;
         }
     }
@@ -80,26 +90,44 @@ class MenfessBot
      */
     public function removeWebhook()
     {
-        $result = $this->botApi->setWebhook(['url' => '']);
-        
-        if ($result) {
-            $this->logger->info("Webhook removed successfully");
-            return true;
-        } else {
-            $this->logger->error('Failed to remove webhook');
+        try {
+            $result = $this->botApi->setWebhook(['url' => '']);
+            
+            if ($result) {
+                $this->logger->info("Webhook removed successfully");
+                return true;
+            } else {
+                $this->logger->error('Failed to remove webhook');
+                return false;
+            }
+        } catch (\Exception $e) {
+            $this->logger->error('Exception removing webhook: ' . $e->getMessage());
             return false;
         }
     }
 
+    /**
+     * Start the bot loop
+     */
     public function start()
     {
         $this->logger->info('Menfess Bot starting...');
         
-        // Set webhook or use getUpdates - for simplicity we'll use getUpdates
-        // In production, you might want to use webhooks
         $offset = 0;
+        $running = true;
         
-        while (true) {
+        // Handle graceful shutdown
+        if (function_exists('pcntl_signal')) {
+            pcntl_signal(SIGINT, function () use (&$running) { $running = false; });
+            pcntl_signal(SIGTERM, function () use (&$running) { $running = false; });
+            pcntl_async_signals(true);
+        }
+        
+        while ($running) {
+            if (function_exists('pcntl_signal_dispatch')) {
+                pcntl_signal_dispatch();
+            }
+            
             try {
                 $updates = $this->botApi->getUpdates(['offset' => $offset, 'timeout' => 30]);
                 
@@ -119,8 +147,13 @@ class MenfessBot
                 sleep(5); // Wait before retrying
             }
         }
+        
+        $this->logger->info('Bot stopped');
     }
 
+    /**
+     * Process an incoming update
+     */
     private function processUpdate(Update $update)
     {
         // Handle incoming messages
@@ -134,6 +167,9 @@ class MenfessBot
         }
     }
 
+    /**
+     * Handle a private message
+     */
     private function handlePrivateMessage($message)
     {
         $user = $message->getFrom();
@@ -143,6 +179,13 @@ class MenfessBot
         $lastName = $user->getLastName();
         $languageCode = $user->getLanguageCode();
         $isBot = $user->getIsBot();
+        $text = $message->getText();
+        
+        // Check for null text (media-only messages)
+        if ($text === null || empty(trim($text))) {
+            $this->botApi->sendMessage($message->getChat()->getId(), "Pesan tidak boleh kosong. Bot ini hanya menerima pesan teks.");
+            return;
+        }
         
         $this->logger->info("Received message from user {$userId}: {$text}");
 
@@ -159,145 +202,9 @@ class MenfessBot
         $this->handleSubmission($message);
     }
     
-    // Method to handle private message from webhook array data
-    private function handlePrivateMessageFromArray($message)
-    {
-        $user = $message['from'];
-        $userId = $user['id'];
-        $username = $user['username'] ?? null;
-        $firstName = $user['first_name'] ?? null;
-        $lastName = $user['last_name'] ?? null;
-        $languageCode = $user['language_code'] ?? null;
-        $isBot = $user['is_bot'] ?? false;
-        
-        $text = $message['text'];
-        
-        $this->logger->info("Received message from user {$userId}: {$text}");
-
-        // Store or update user information (for analytics, not for breaking anonymity)
-        $this->storeUserInfo($userId, $username, $firstName, $lastName, $languageCode, $isBot);
-
-        // Handle commands
-        if (strpos($text, '/') === 0) {
-            $this->handleCommandFromArray($message);
-            return;
-        }
-
-        // Handle regular messages as submissions
-        $this->handleSubmissionFromArray($message);
-    }
-    
-    // Method to handle command from webhook array data
-    private function handleCommandFromArray($message)
-    {
-        $command = strtolower($message['text']);
-        $chatId = $message['chat']['id'];
-        
-        switch ($command) {
-            case '/start':
-                $this->botApi->sendMessage($chatId, "Selamat datang di Bot Menfess!\n\nKirim pesan anonymous Anda ke bot ini, dan jika disetujui, akan diposting ke channel menfess.");
-                break;
-                
-            case '/help':
-                $helpText = "Panduan Penggunaan Bot Menfess:\n\n";
-                $helpText .= "/start - Memulai bot\n";
-                $helpText .= "/help - Menampilkan panduan ini\n";
-                $helpText .= "/status - Melihat status bot\n\n";
-                $helpText .= "Kirim pesan apa saja untuk membuat menfess anonymous.";
-                $this->botApi->sendMessage($chatId, $helpText);
-                break;
-                
-            case '/status':
-                $stats = $this->getSubmissionStats();
-                $statusText = "Status Bot Menfess:\n\n";
-                $statusText .= "Pending: {$stats['pending']}\n";
-                $statusText .= "Approved: {$stats['approved']}\n";
-                $statusText .= "Rejected: {$stats['rejected']}\n";
-                $statusText .= "Posted: {$stats['posted']}\n";
-                $this->botApi->sendMessage($chatId, $statusText);
-                break;
-                
-            default:
-                $this->botApi->sendMessage($chatId, "Perintah tidak dikenali. Ketik /help untuk melihat panduan.");
-        }
-    }
-    
-    // Method to handle submission from webhook array data
-    private function handleSubmissionFromArray($message)
-    {
-        $user = $message['from'];
-        $userId = $user['id'];
-        $username = $user['username'] ?? null;
-        $firstName = $user['first_name'] ?? null;
-        $lastName = $user['last_name'] ?? null;
-        $languageCode = $user['language_code'] ?? null;
-        $isBot = $user['is_bot'] ?? false;
-        $text = $message['text'];
-        
-        // Store submission in database
-        $stmt = $this->connection->prepare("INSERT INTO submissions (message_text, submitted_at) VALUES (?, NOW())");
-        $stmt->bindValue(1, $text);
-        $stmt->execute();
-        
-        $submissionId = (int)$this->connection->lastInsertId();
-        
-        $this->logger->info("Stored submission {$submissionId} from user {$userId}");
-        
-        // Store or update user information (for analytics, not for breaking anonymity)
-        $this->storeUserInfo($userId, $username, $firstName, $lastName, $languageCode, $isBot);
-        
-        // Calculate queue position
-        $queuePosition = $this->getQueuePosition($submissionId);
-        
-        // Calculate estimated wait time
-        $estimatedWaitSeconds = $queuePosition * $this->postingInterval;
-        $waitTimeString = $this->formatWaitTime($estimatedWaitSeconds);
-        
-        // Send acknowledgment to user with queue and time information
-        $responseMessage = "Pesan diterima! ";
-        if ($queuePosition > 0) {
-            $responseMessage .= "Anda berada di antrian ke-{$queuePosition}. ";
-            $responseMessage .= "Estimasi waktu penayangan: {$waitTimeString}. ";
-        } else {
-            $responseMessage .= "Menfess Anda akan diposting dalam approximasi {$waitTimeString}. ";
-        }
-        $responseMessage .= "Menfess akan diposting secara berurutan dengan jeda 1 menit antar posting.";
-        
-        $this->botApi->sendMessage($message['chat']['id'], $responseMessage);
-        
-        // Notify admins about new submission (in a real implementation, you'd have an admin system)
-        // For now, we'll just log it
-        $this->logger->info("New submission {$submissionId} awaiting auto-approval. Queue position: {$queuePosition}, Estimated wait: {$waitTimeString}");
-    }
-    
-    // Method to handle callback query from webhook array data
-    private function handleCallbackQueryFromArray($callbackQuery)
-    {
-        $data = $callbackQuery['data'];
-        $messageId = $callbackQuery['message']['message_id'];
-        $chatId = $callbackQuery['message']['chat']['id'];
-        
-        // Parse callback data: action_submissionId
-        if (strpos($data, '_') !== false) {
-            $parts = explode('_', $data);
-            $action = $parts[0];
-            $submissionId = (int)$parts[1];
-            
-            switch ($action) {
-                case 'approve':
-                    $this->approveSubmission($submissionId, $callbackQuery['from']['username']);
-                    break;
-                case 'reject':
-                    $this->rejectSubmission($submissionId, $callbackQuery['from']['username']);
-                    break;
-            }
-            
-            // Update the message to show it's been processed
-            // Note: For simplicity, we're not implementing editMessageReplyMarkup for array-based updates
-            // In a full implementation, you would properly handle this
-        }
-    }
-
+    /**
+     * Handle a command message
+     */
     private function handleCommand($message)
     {
         $command = strtolower($message->getText());
@@ -332,17 +239,25 @@ class MenfessBot
         }
     }
 
+    /**
+     * Handle a submission message
+     */
     private function handleSubmission($message)
     {
         $userId = $message->getFrom()->getId();
         $text = $message->getText();
         
-        // Store submission in database
-        $stmt = $this->connection->prepare("INSERT INTO submissions (message_text, submitted_at) VALUES (?, NOW())");
-        $stmt->bindValue(1, $text);
-        $stmt->execute();
+        // Check for empty message
+        if (empty(trim($text))) {
+            $this->botApi->sendMessage($message->getChat()->getId(), "Pesan tidak boleh kosong.");
+            return;
+        }
         
-        $submissionId = (int)$this->connection->lastInsertId();
+        // Store submission in database using PDO
+        $stmt = $this->pdo->prepare("INSERT INTO submissions (message_text, submitted_at) VALUES (?, NOW())");
+        $stmt->execute([$text]);
+        
+        $submissionId = (int)$this->pdo->lastInsertId();
         
         $this->logger->info("Stored submission {$submissionId} from user {$userId}");
         
@@ -359,7 +274,7 @@ class MenfessBot
             $responseMessage .= "Anda berada di antrian ke-{$queuePosition}. ";
             $responseMessage .= "Estimasi waktu penayangan: {$waitTimeString}. ";
         } else {
-            $responseMessage .= "Menfess Anda akan diposting dalam approximasi {$waitTimeString}. ";
+            $responseMessage .= "Menfess Anda akan diposting dalam perkiraan {$waitTimeString}. ";
         }
         $responseMessage .= "Menfess akan diposting secara berurutan dengan jeda 1 menit antar posting.";
         
@@ -378,14 +293,13 @@ class MenfessBot
     {
         try {
             // Check if user already exists
-            $stmt = $this->connection->prepare("SELECT id FROM users WHERE telegram_id = ?");
-            $stmt->bindValue(1, $telegramId);
-            $stmt->execute();
+            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE telegram_id = ?");
+            $stmt->execute([$telegramId]);
             $user = $stmt->fetch();
             
             if ($user) {
                 // Update existing user
-                $stmt = $this->connection->prepare("UPDATE users SET 
+                $stmt = $this->pdo->prepare("UPDATE users SET 
                                                     username = ?, 
                                                     first_name = ?, 
                                                     last_name = ?, 
@@ -394,25 +308,13 @@ class MenfessBot
                                                     last_seen = NOW(),
                                                     submission_count = submission_count + 1
                                                   WHERE telegram_id = ?");
-                $stmt->bindValue(1, $username);
-                $stmt->bindValue(2, $firstName);
-                $stmt->bindValue(3, $lastName);
-                $stmt->bindValue(4, $languageCode);
-                $stmt->bindValue(5, $isBot ? 1 : 0);
-                $stmt->bindValue(6, $telegramId);
-                $stmt->execute();
+                $stmt->execute([$username, $firstName, $lastName, $languageCode, $isBot ? 1 : 0, $telegramId]);
             } else {
                 // Insert new user
-                $stmt = $this->connection->prepare("INSERT INTO users 
+                $stmt = $this->pdo->prepare("INSERT INTO users 
                                                     (telegram_id, username, first_name, last_name, language_code, is_bot, submission_count)
                                                   VALUES (?, ?, ?, ?, ?, ?, 1)");
-                $stmt->bindValue(1, $telegramId);
-                $stmt->bindValue(2, $username);
-                $stmt->bindValue(3, $firstName);
-                $stmt->bindValue(4, $lastName);
-                $stmt->bindValue(5, $languageCode);
-                $stmt->bindValue(6, $isBot ? 1 : 0);
-                $stmt->execute();
+                $stmt->execute([$telegramId, $username, $firstName, $lastName, $languageCode, $isBot ? 1 : 0]);
             }
             
             $this->logger->info("Stored/updated user info for telegram_id {$telegramId}");
@@ -422,120 +324,142 @@ class MenfessBot
         }
     }
 
+    /**
+     * Handle callback query (inline button clicks)
+     */
     private function handleCallbackQuery($callbackQuery)
     {
-        $data = $callbackQuery->getData();
-        $messageId = $callbackQuery->getMessage()->getMessageId();
-        $chatId = $callbackQuery->getMessage()->getChat()->getId();
-        
-        // Parse callback data: action_submissionId
-        if (strpos($data, '_') !== false) {
-            $parts = explode('_', $data);
-            $action = $parts[0];
-            $submissionId = (int)$parts[1];
+        try {
+            $data = $callbackQuery->getData();
+            $messageId = $callbackQuery->getMessage()->getMessageId();
+            $chatId = $callbackQuery->getMessage()->getChat()->getId();
             
-            switch ($action) {
-                case 'approve':
-                    $this->approveSubmission($submissionId, $callbackQuery->getFrom()->getUsername());
-                    break;
-                case 'reject':
-                    $this->rejectSubmission($submissionId, $callbackQuery->getFrom()->getUsername());
-                    break;
+            // Parse callback data: action_submissionId
+            if (strpos($data, '_') !== false) {
+                $parts = explode('_', $data);
+                $action = $parts[0];
+                $submissionId = (int)$parts[1];
+                
+                switch ($action) {
+                    case 'approve':
+                        $this->approveSubmission($submissionId, $callbackQuery->getFrom()->getUsername());
+                        break;
+                    case 'reject':
+                        $this->rejectSubmission($submissionId, $callbackQuery->getFrom()->getUsername());
+                        break;
+                }
+                
+                // Update the message to show it's been processed (with error handling)
+                try {
+                    $this->botApi->editMessageReplyMarkup($chatId, $messageId, '');
+                } catch (\Exception $e) {
+                    // Log but don't break the flow if editMessageReplyMarkup fails
+                    $this->logger->error("Failed to edit message reply markup: " . $e->getMessage());
+                }
             }
             
-            // Update the message to show it's been processed
-            $this->botApi->editMessageReplyMarkup($chatId, $messageId, '');
+            // Answer callback query to remove loading state
+            $this->botApi->answerCallbackQuery($callbackQuery->getId(), 'Processing...');
+        } catch (\Exception $e) {
+            $this->logger->error("Error handling callback query: " . $e->getMessage());
         }
     }
 
+    /**
+     * Show pending queue
+     */
     public function showQueue()
     {
-        // This would typically be called via a command or admin interface
-        $stmt = $this->connection->prepare("SELECT id, message_text, submitted_at FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC");
+        $stmt = $this->pdo->prepare("SELECT id, message_text, submitted_at FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC");
         $stmt->execute();
-        $submissions = $stmt->fetchAll();
-        
-        return $submissions;
+        return $stmt->fetchAll();
     }
 
+    /**
+     * Approve a submission and post to channel
+     */
     private function approveSubmission($submissionId, $moderatorUsername)
     {
         // Update submission status
-        $stmt = $this->connection->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
-        $stmt->bindValue(1, $moderatorUsername);
-        $stmt->bindValue(2, $submissionId);
-        $stmt->execute();
+        $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
+        $stmt->execute([$moderatorUsername, $submissionId]);
         
         // Get the submission text
-        $stmt = $this->connection->prepare("SELECT message_text FROM submissions WHERE id = ?");
-        $stmt->bindValue(1, $submissionId);
-        $stmt->execute();
+        $stmt = $this->pdo->prepare("SELECT message_text FROM submissions WHERE id = ?");
+        $stmt->execute([$submissionId]);
         $submission = $stmt->fetch();
         
         if ($submission) {
             // Post to Telegram channel
-            $result = $this->botApi->sendMessage($this->targetChannelId, $submission['message_text']);
-            
-            if ($result && isset($result['message_id'])) {
-                // Store the posted message ID
-                $stmt = $this->connection->prepare("INSERT INTO channel_posts (submission_id, telegram_message_id) VALUES (?, ?)");
-                $stmt->bindValue(1, $submissionId);
-                $stmt->bindValue(2, $result['message_id']);
-                $stmt->execute();
+            try {
+                $result = $this->botApi->sendMessage($this->targetChannelId, $submission['message_text']);
                 
-                $this->logger->info("Submission {$submissionId} approved and posted to channel");
-            } else {
-                $this->logger->error("Failed to post submission {$submissionId} to channel");
+                if ($result && isset($result['message_id'])) {
+                    // Store the posted message ID
+                    $stmt = $this->pdo->prepare("INSERT INTO channel_posts (submission_id, telegram_message_id) VALUES (?, ?)");
+                    $stmt->execute([$submissionId, $result['message_id']]);
+                    
+                    $this->logger->info("Submission {$submissionId} approved and posted to channel");
+                } else {
+                    $this->logger->error("Failed to post submission {$submissionId} to channel");
+                    // Revert approval if posting failed
+                    $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
+                    $stmt->execute([$submissionId]);
+                }
+            } catch (\Exception $e) {
+                $this->logger->error("Exception posting submission to channel: " . $e->getMessage());
                 // Revert approval if posting failed
-                $stmt = $this->connection->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
-                $stmt->bindValue(1, $submissionId);
-                $stmt->execute();
+                $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
+                $stmt->execute([$submissionId]);
             }
         }
     }
 
+    /**
+     * Reject a submission
+     */
     private function rejectSubmission($submissionId, $moderatorUsername)
     {
         // Update submission status
-        $stmt = $this->connection->prepare("UPDATE submissions SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
-        $stmt->bindValue(1, $moderatorUsername);
-        $stmt->bindValue(2, $submissionId);
-        $stmt->execute();
+        $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
+        $stmt->execute([$moderatorUsername, $submissionId]);
         
         $this->logger->info("Submission {$submissionId} rejected by moderator {$moderatorUsername}");
     }
 
+    /**
+     * Get submission statistics
+     */
     private function getSubmissionStats()
     {
         $stats = [];
         
         // Pending submissions
-        $stmt = $this->connection->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'pending'");
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'pending'");
         $stmt->execute();
-        $result = $stmt->fetch();
-        $stats['pending'] = (int)$result['count'];
+        $stats['pending'] = (int)$stmt->fetch()['count'];
         
         // Approved submissions
-        $stmt = $this->connection->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'approved'");
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'approved'");
         $stmt->execute();
-        $result = $stmt->fetch();
-        $stats['approved'] = (int)$result['count'];
+        $stats['approved'] = (int)$stmt->fetch()['count'];
         
         // Rejected submissions
-        $stmt = $this->connection->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'rejected'");
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'rejected'");
         $stmt->execute();
-        $result = $stmt->fetch();
-        $stats['rejected'] = (int)$result['count'];
+        $stats['rejected'] = (int)$stmt->fetch()['count'];
         
         // Posted submissions
-        $stmt = $this->connection->prepare("SELECT COUNT(*) as count FROM channel_posts");
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) as count FROM channel_posts");
         $stmt->execute();
-        $result = $stmt->fetch();
-        $stats['posted'] = (int)$result['count'];
+        $stats['posted'] = (int)$stmt->fetch()['count'];
         
         return $stats;
     }
     
+    /**
+     * Format wait time for display
+     */
     private function formatWaitTime($seconds)
     {
         if ($seconds < 60) {
@@ -554,17 +478,21 @@ class MenfessBot
         }
     }
     
+    /**
+     * Get queue position for a submission
+     */
     private function getQueuePosition($submissionId)
     {
         // Count how many pending submissions were submitted before this one
-        $stmt = $this->connection->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'pending' AND submitted_at <= (SELECT submitted_at FROM submissions WHERE id = ?)");
-        $stmt->bindValue(1, $submissionId);
-        $stmt->execute();
-        $result = $stmt->fetch();
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) as count FROM submissions WHERE status = 'pending' AND submitted_at <= (SELECT submitted_at FROM submissions WHERE id = ?)");
+        $stmt->execute([$submissionId]);
         
-        return (int)$result['count'];
+        return (int)$stmt->fetch()['count'];
     }
     
+    /**
+     * Process auto-approval queue
+     */
     private function processAutoApprovalQueue()
     {
         // Check if enough time has passed since last post
@@ -574,7 +502,7 @@ class MenfessBot
         }
         
         // Find the oldest pending submission
-        $stmt = $this->connection->prepare("SELECT id, message_text FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT id, message_text FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC LIMIT 1");
         $stmt->execute();
         $submission = $stmt->fetch();
         
@@ -585,9 +513,8 @@ class MenfessBot
             $this->logger->info("Auto-approving submission {$submissionId} for posting");
             
             // Update submission status to approved
-            $stmt = $this->connection->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = 'auto-approval' WHERE id = ?");
-            $stmt->bindValue(1, $submissionId);
-            $stmt->execute();
+            $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = 'auto-approval' WHERE id = ?");
+            $stmt->execute([$submissionId]);
             
             // Post to Telegram channel
             try {
@@ -595,10 +522,8 @@ class MenfessBot
                 
                 if ($result && isset($result['message_id'])) {
                     // Store the posted message ID
-                    $stmt = $this->connection->prepare("INSERT INTO channel_posts (submission_id, telegram_message_id) VALUES (?, ?)");
-                    $stmt->bindValue(1, $submissionId);
-                    $stmt->bindValue(2, $result['message_id']);
-                    $stmt->execute();
+                    $stmt = $this->pdo->prepare("INSERT INTO channel_posts (submission_id, telegram_message_id) VALUES (?, ?)");
+                    $stmt->execute([$submissionId, $result['message_id']]);
                     
                     // Update last processed time
                     $this->lastProcessedTime = time();
@@ -607,21 +532,15 @@ class MenfessBot
                 } else {
                     $this->logger->error("Failed to post submission {$submissionId} to channel");
                     // Revert approval if posting failed
-                    $stmt = $this->connection->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
-                    $stmt->bindValue(1, $submissionId);
-                    $stmt->execute();
+                    $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
+                    $stmt->execute([$submissionId]);
                 }
             } catch (\Exception $e) {
                 $this->logger->error("Exception while posting submission {$submissionId}: " . $e->getMessage());
                 // Revert approval if posting failed
-                $stmt = $this->connection->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
-                $stmt->bindValue(1, $submissionId);
-                $stmt->execute();
+                $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
+                $stmt->execute([$submissionId]);
             }
         }
     }
 }
-
-// Run the bot
-$bot = new MenfessBot();
-$bot->start();
