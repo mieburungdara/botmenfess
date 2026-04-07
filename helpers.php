@@ -68,11 +68,12 @@ function menfessHandleTiers($api, $cid, $pdo) {
 // BUG 2 FIX: now saves/extraxts user info
 function menfessHandleSubmit($api, $cid, $uid, $txt, $pdo) {
     if (empty(trim($txt))) return;
-    // Save/update user
-    $stmt = $pdo->prepare('INSERT INTO users (telegram_id, first_seen) VALUES (?, NOW()) ON DUPLICATE KEY UPDATE last_seen = NOW()');
-    $stmt->execute([$uid]);
     if (!menfessCheckLimit($pdo, $api, $cid, $uid)) return;
+    // Save/update user (only if submission is allowed)
+    $stmt = $pdo->prepare('INSERT IGNORE INTO users (telegram_id, first_seen) VALUES (?, NOW())');
+    $stmt->execute([$uid]);
     menfessRecordUsage($pdo, $uid);
     $pdo->prepare('INSERT INTO submissions (message_text) VALUES (?)')->execute([$txt]);
+    $pdo->prepare('UPDATE users SET last_seen = NOW(), submission_count = submission_count + 1 WHERE telegram_id = ?')->execute([$uid]);
     $api->sendMessage($cid, 'Pesan menfess berhasil dikirim!');
 }
