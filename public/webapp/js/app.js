@@ -65,6 +65,10 @@ const TelegramWebApp = {
     showMainButton(text, callback) {
         try {
             if (this.webApp && this.webApp.MainButton) {
+                // Remove previous listener to prevent memory leak
+                if (this.webApp.MainButton.offClick) {
+                    this.webApp.MainButton.offClick();
+                }
                 this.webApp.MainButton.setText(text);
                 this.webApp.MainButton.show();
                 this.webApp.MainButton.onClick(callback);
@@ -87,6 +91,10 @@ const TelegramWebApp = {
     showBackButton(callback) {
         try {
             if (this.webApp && this.webApp.BackButton) {
+                // Remove previous listener to prevent memory leak
+                if (this.webApp.BackButton.offClick) {
+                    this.webApp.BackButton.offClick();
+                }
                 this.webApp.BackButton.show();
                 this.webApp.BackButton.onClick(callback);
             }

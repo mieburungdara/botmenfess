@@ -101,18 +101,27 @@ function renderProfile(profile) {
     renderBadges(profile.badges || []);
     
     // Render activity heatmap
-    renderHeatmap(stats.most_active_hours || []);
+    if (stats.most_active_hours) {
+        renderHeatmap(stats.most_active_hours);
+    }
     
     // Render daily activity chart
-    renderDailyActivity(profile.daily_activity || []);
+    if (profile.daily_activity) {
+        renderDailyActivity(profile.daily_activity);
+    }
     
     // Render comment history
-    renderCommentHistory(profile.comment_history || []);
+    if (profile.comment_history) {
+        renderCommentHistory(profile.comment_history);
+    }
 }
 
 function renderBadges(badges) {
     const container = document.getElementById('badges-container');
-    if (!container) return;
+    if (!container) {
+        console.warn('Badges container element not found');
+        return;
+    }
     
     if (badges.length === 0) {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada badge. Mulai berkomentar untuk mendapatkan badge!</div>';

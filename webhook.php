@@ -106,7 +106,8 @@ try {
     
     http_response_code(200);
 } catch (Exception $e) {
-    $logger->error($e->getMessage());
+    $logger->error('Webhook error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    // Don't expose internal error details to clients
+    echo json_encode(['status' => 'error', 'message' => 'Internal server error']);
 }

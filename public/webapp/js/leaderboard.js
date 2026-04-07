@@ -28,8 +28,12 @@ async function loadLeaderboard(timeframe = 'alltime') {
         
         leaderboardData = response;
         renderLeaderboard(response);
-        renderPersonalRank(response.personal_rank);
-        renderStats(response.stats);
+        if (response.personal_rank) {
+            renderPersonalRank(response.personal_rank);
+        }
+        if (response.stats) {
+            renderStats(response.stats);
+        }
         
         // Update timestamp
         const lastUpdatedEl = document.getElementById('last-updated');
@@ -68,7 +72,9 @@ function renderLeaderboard(data) {
             badgesHtml = '<div class="user-badges">';
             displayBadges.forEach(badge => {
                 const badgeInfo = BADGES[badge.badge_key] || {};
-                badgesHtml += `<span class="badge" title="${badgeInfo.name || badge.badge_key}">${badgeInfo.icon || '🏅'}</span>`;
+                const badgeName = escapeHtml(badgeInfo.name || badge.badge_key);
+                const badgeIcon = badgeInfo.icon || '🏅';
+                badgesHtml += `<span class="badge" title="${badgeName}">${badgeIcon}</span>`;
             });
             if (user.badges.length > 4) {
                 badgesHtml += `<span class="badge">+${user.badges.length - 4}</span>`;

@@ -376,21 +376,31 @@ class MenfessBot
     }
 
     /**
-     * Approve a submission and post to channel
+     * Approve a submission and post to channel (with transaction to prevent race conditions)
      */
     private function approveSubmission($submissionId, $moderatorUsername)
     {
-        // Update submission status
-        $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
-        $stmt->execute([$moderatorUsername, $submissionId]);
-        
-        // Get the submission text
-        $stmt = $this->pdo->prepare("SELECT message_text FROM submissions WHERE id = ?");
-        $stmt->execute([$submissionId]);
-        $submission = $stmt->fetch();
-        
-        if ($submission) {
-            // Post to Telegram channel
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Lock the row to prevent concurrent modifications
+            $stmt = $this->pdo->prepare("SELECT id, message_text, status FROM submissions WHERE id = ? FOR UPDATE SKIP LOCKED");
+            $stmt->execute([$submissionId]);
+            $submission = $stmt->fetch();
+            
+            if (!$submission || $submission['status'] !== 'pending') {
+                $this->pdo->rollBack();
+                $this->logger->warning("Submission {$submissionId} not found or already processed");
+                return;
+            }
+            
+            // Update submission status
+            $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
+            $stmt->execute([$moderatorUsername, $submissionId]);
+            
+            $this->pdo->commit();
+            
+            // Post to Telegram channel (outside transaction)
             try {
                 $result = $this->botApi->sendMessage($this->targetChannelId, $submission['message_text']);
                 
@@ -412,19 +422,46 @@ class MenfessBot
                 $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
                 $stmt->execute([$submissionId]);
             }
+        } catch (\Exception $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            $this->logger->error("Error approving submission: " . $e->getMessage());
         }
     }
 
     /**
-     * Reject a submission
+     * Reject a submission (with transaction to prevent race conditions)
      */
     private function rejectSubmission($submissionId, $moderatorUsername)
     {
-        // Update submission status
-        $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
-        $stmt->execute([$moderatorUsername, $submissionId]);
-        
-        $this->logger->info("Submission {$submissionId} rejected by moderator {$moderatorUsername}");
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Lock the row to prevent concurrent modifications
+            $stmt = $this->pdo->prepare("SELECT id, status FROM submissions WHERE id = ? FOR UPDATE SKIP LOCKED");
+            $stmt->execute([$submissionId]);
+            $submission = $stmt->fetch();
+            
+            if (!$submission || $submission['status'] !== 'pending') {
+                $this->pdo->rollBack();
+                $this->logger->warning("Submission {$submissionId} not found or already processed");
+                return;
+            }
+            
+            // Update submission status
+            $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
+            $stmt->execute([$moderatorUsername, $submissionId]);
+            
+            $this->pdo->commit();
+            
+            $this->logger->info("Submission {$submissionId} rejected by moderator {$moderatorUsername}");
+        } catch (\Exception $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            $this->logger->error("Error rejecting submission: " . $e->getMessage());
+        }
     }
 
     /**

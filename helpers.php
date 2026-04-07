@@ -694,32 +694,43 @@ function getUserBadges($pdo, $userId) {
 function getOverallStats($pdo, $timeframe = 'alltime') {
     $stats = [];
     
-    $dateFilter = '';
-    switch ($timeframe) {
-        case 'weekly':
-            $dateFilter = 'WHERE c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND u.is_shadow_banned = 0';
-            break;
-        case 'monthly':
-            $dateFilter = 'WHERE c.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND u.is_shadow_banned = 0';
-            break;
-        default:
-            $dateFilter = 'WHERE u.is_shadow_banned = 0';
+    // Validate timeframe
+    if (!in_array($timeframe, ['weekly', 'monthly', 'alltime'])) {
+        $timeframe = 'alltime';
     }
     
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM comments c INNER JOIN users u ON c.user_id = u.id ' . $dateFilter);
+    // Build date filter conditions safely
+    $dateCondition = '';
+    switch ($timeframe) {
+        case 'weekly':
+            $dateCondition = 'AND c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
+            break;
+        case 'monthly':
+            $dateCondition = 'AND c.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
+            break;
+    }
+    
+    // Total comments (with timeframe filter, excludes shadow banned)
+    $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM comments c INNER JOIN users u ON c.user_id = u.id WHERE u.is_shadow_banned = 0 ' . $dateCondition);
+    $stmt->execute();
     $row = $stmt->fetch();
     $stats['total_comments'] = (int)$row['count'];
     
-    $stmt = $pdo->query('SELECT COUNT(DISTINCT c.user_id) as count FROM comments c INNER JOIN users u ON c.user_id = u.id ' . $dateFilter);
+    // Total commenters (with timeframe filter, excludes shadow banned)
+    $stmt = $pdo->prepare('SELECT COUNT(DISTINCT c.user_id) as count FROM comments c INNER JOIN users u ON c.user_id = u.id WHERE u.is_shadow_banned = 0 ' . $dateCondition);
+    $stmt->execute();
     $row = $stmt->fetch();
     $stats['total_commenters'] = (int)$row['count'];
     
-    // Submissions don't have timeframe filter, keep as is
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM submissions');
+    // Submissions don't have timeframe filter
+    $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM submissions');
+    $stmt->execute();
     $row = $stmt->fetch();
     $stats['total_submissions'] = (int)$row['count'];
     
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM users');
+    // Total users
+    $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM users');
+    $stmt->execute();
     $row = $stmt->fetch();
     $stats['total_users'] = (int)$row['count'];
     

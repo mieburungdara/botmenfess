@@ -51,8 +51,12 @@ function renderAdminStats(stats) {
 
 function renderCacheStatus(cacheStatus) {
     const container = document.getElementById('cache-status');
+    if (!container) {
+        console.warn('Cache status container not found');
+        return;
+    }
     
-    if (cacheStatus.length === 0) {
+    if (!Array.isArray(cacheStatus) || cacheStatus.length === 0) {
         container.innerHTML = '<div style="color:var(--text-muted)">Belum ada cache</div>';
         return;
     }
@@ -101,8 +105,12 @@ function escapeHtml(text) {
 
 function renderRecentActivity(activity) {
     const container = document.getElementById('recent-activity');
+    if (!container) {
+        console.warn('Recent activity container not found');
+        return;
+    }
     
-    if (activity.length === 0) {
+    if (!Array.isArray(activity) || activity.length === 0) {
         container.innerHTML = '<div style="color:var(--text-muted)">Belum ada aktivitas</div>';
         return;
     }
