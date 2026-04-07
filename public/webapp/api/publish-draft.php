@@ -2,9 +2,11 @@
 /**
  * Publish Draft API Endpoint
  * Updates a submission status from pending to approved
+ * Requires admin authentication
  * 
  * POST parameters:
  * - submission_id: ID of the submission to publish
+ * - admin_id: Admin telegram ID for authentication
  */
 
 header('Content-Type: application/json');
@@ -20,6 +22,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once __DIR__ . '/../../../config.php';
 
+// Simple admin check - in production, use proper authentication
+function isAdmin($telegramId) {
+    if (!$telegramId) {
+        return false;
+    }
+    $adminIds = defined('ADMIN_TELEGRAM_IDS') ? ADMIN_TELEGRAM_IDS : [];
+    if (empty($adminIds)) {
+        return false;
+    }
+    return in_array($telegramId, $adminIds, true);
+}
+
 try {
     // Database connection using PDO
     $pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS);
@@ -28,6 +42,17 @@ try {
     
     $input = json_decode(file_get_contents('php://input'), true);
     $submissionId = (int)($input['submission_id'] ?? 0);
+    $adminId = $input['admin_id'] ?? null;
+    
+    // Require admin authentication
+    if (!isAdmin($adminId)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Unauthorized. Admin access required.'
+        ]);
+        exit;
+    }
     
     if (!$submissionId) {
         http_response_code(400);
@@ -62,8 +87,8 @@ try {
     }
     
     // Update submission status to approved
-    $stmt = $pdo->prepare('UPDATE submissions SET status = ?, reviewed_at = NOW() WHERE id = ?');
-    $stmt->execute(['approved', $submissionId]);
+    $stmt = $pdo->prepare('UPDATE submissions SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ?');
+    $stmt->execute(['approved', 'admin_' . $adminId, $submissionId]);
     
     echo json_encode([
         'success' => true,

@@ -24,8 +24,19 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $logger->info('Bot starting');
-    $offset = 0;
-        while ($running) {
+    
+    // Load last processed offset from file to prevent duplicate processing after restart
+    $offsetFile = __DIR__ . '/.bot_offset';
+    if (file_exists($offsetFile)) {
+        $savedOffset = file_get_contents($offsetFile);
+        if ($savedOffset !== false) {
+            $offset = (int)$savedOffset;
+        }
+    }
+    
+    $logger->info('Starting with offset: ' . $offset);
+    
+    while ($running) {
             if (function_exists('pcntl_signal_dispatch')) pcntl_signal_dispatch();
             
             try {
@@ -43,27 +54,39 @@ try {
                     // Handle message updates
                     if ($u->getMessage()) {
                         $msg = $u->getMessage();
-                        $cid = $msg->getChat()->getId();
+                        
+                        // Safely get chat and from objects
+                        $chat = $msg->getChat();
+                        $from = $msg->getFrom();
+                        
+                        if (!$chat || !$from) {
+                            continue; // Skip messages without chat or from info
+                        }
+                        
+                        $cid = $chat->getId();
                         $txt = $msg->getText() ?? '';
-                        $uid = $msg->getFrom()->getId();
+                        $uid = $from->getId();
                         
                         // Check if this is from discussion group (handle comments)
                         if ((string)$cid === (string)DISCUSSION_GROUP_ID) {
                             // Convert message object to array for handleComment
+                            $replyToMsg = $msg->getReplyToMessage();
+                            $forwardFrom = $msg->getForwardFrom();
+                            
                             $msgArray = [
                                 'from' => [
-                                    'id' => $msg->getFrom()->getId(),
-                                    'username' => $msg->getFrom()->getUsername(),
-                                    'first_name' => $msg->getFrom()->getFirstName(),
-                                    'last_name' => $msg->getFrom()->getLastName(),
+                                    'id' => $from->getId(),
+                                    'username' => $from->getUsername(),
+                                    'first_name' => $from->getFirstName(),
+                                    'last_name' => $from->getLastName(),
                                 ],
                                 'text' => $txt,
                                 'chat' => ['id' => $cid],
                                 'message_id' => $msg->getMessageId(),
-                                'reply_to_message' => $msg->getReplyToMessage() ? [
-                                    'message_id' => $msg->getReplyToMessage()->getMessageId()
+                                'reply_to_message' => $replyToMsg ? [
+                                    'message_id' => $replyToMsg->getMessageId()
                                 ] : null,
-                                'is_automatic_forward' => $msg->getForwardFrom() !== null,
+                                'is_automatic_forward' => $forwardFrom !== null,
                             ];
                             handleComment($api, $pdo, $msgArray);
                         } elseif ($msg->getChat()->getType() === 'private') {
@@ -92,9 +115,19 @@ try {
                     if ($u->getCallbackQuery()) {
                         $callback = $u->getCallbackQuery();
                         $callbackData = $callback->getData() ?? '';
-                        $callbackChatId = $callback->getMessage()->getChat()->getId();
-                        $callbackMessageId = $callback->getMessage()->getMessageId();
-                        $callbackUserId = $callback->getFrom()->getId();
+                        
+                        // Safely get message objects
+                        $callbackMsg = $callback->getMessage();
+                        $callbackFrom = $callback->getFrom();
+                        
+                        if (!$callbackMsg || !$callbackFrom) {
+                            $api->answerCallbackQuery($callback->getId());
+                            continue;
+                        }
+                        
+                        $callbackChatId = $callbackMsg->getChat()->getId();
+                        $callbackMessageId = $callbackMsg->getMessageId();
+                        $callbackUserId = $callbackFrom->getId();
                         
                         // Handle admin callbacks
                         if (in_array($callbackUserId, ADMIN_TELEGRAM_IDS, true)) {
@@ -120,6 +153,13 @@ try {
             }
             usleep(200000);
         }
+        
+        // Save offset to file before stopping
+        if ($offset > 0) {
+            file_put_contents($offsetFile, $offset);
+            $logger->info('Saved offset: ' . $offset);
+        }
+        
     $logger->info('Bot stopped');
 } catch (Exception $e) {
     $logger->error('Fatal: ' . $e->getMessage());
