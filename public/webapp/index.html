@@ -272,7 +272,18 @@
         loadStats();
         
         // Refresh stats every 30 seconds
-        setInterval(loadStats, 30000);
+        const statsInterval = setInterval(loadStats, 30000);
+        
+        // Cleanup interval on page unload to prevent memory leaks
+        window.addEventListener('beforeunload', () => {
+            clearInterval(statsInterval);
+        });
+        
+        // Handle unhandled promise rejections globally
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled rejection:', e.reason);
+            e.preventDefault();
+        });
     </script>
 </body>
 </html>

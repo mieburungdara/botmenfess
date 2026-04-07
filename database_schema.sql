@@ -78,10 +78,11 @@ CREATE TABLE IF NOT EXISTS channel_posts (
     FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- Indexes for performance
+-- Indexes for submissions table
 CREATE INDEX idx_submissions_status ON submissions(status);
 CREATE INDEX idx_submissions_submitted_at ON submissions(submitted_at);
 CREATE INDEX idx_submissions_status_submitted ON submissions(status, submitted_at);
+CREATE INDEX idx_submissions_reviewed_by ON submissions(reviewed_by);
 
 -- ============================================
 -- COMMENTS TABLE
@@ -100,6 +101,8 @@ CREATE TABLE IF NOT EXISTS comments (
     INDEX idx_submission_id (submission_id),
     INDEX idx_comments_user_created (user_id, created_at),
     INDEX idx_comments_created (created_at),
+    INDEX idx_comments_telegram_message_id (telegram_message_id),
+    INDEX idx_comments_submission_user (submission_id, user_id),
     FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -144,7 +147,9 @@ CREATE TABLE IF NOT EXISTS comment_history (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_comment_history_comment (comment_id),
+    INDEX idx_comment_history_action (action, created_at)
 ) ENGINE=InnoDB;
 
 -- ============================================
@@ -158,7 +163,8 @@ CREATE TABLE IF NOT EXISTS user_titles (
     earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE KEY idx_user_title (user_id, title_key),
-    INDEX idx_user_titles_user_earned (user_id, earned_at)
+    INDEX idx_user_titles_user_earned (user_id, earned_at),
+    INDEX idx_user_titles_key (title_key)
 ) ENGINE=InnoDB;
 
 -- ============================================
