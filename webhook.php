@@ -76,20 +76,31 @@ try {
         $callbackChatId = $data['callback_query']['message']['chat']['id'] ?? null;
         $callbackMessageId = $data['callback_query']['message']['message_id'] ?? null;
         $callbackUserId = $data['callback_query']['from']['id'] ?? null;
+        $callbackId = $data['callback_query']['id'] ?? '';
         
-        // Handle admin callbacks (strict type comparison for Telegram IDs)
-        if (in_array($callbackUserId, ADMIN_TELEGRAM_IDS, true)) {
-            if (strpos($callbackData, 'admin_') === 0) {
-                // Handle admin actions
-                $parts = explode('_', $callbackData);
-                $action = $parts[1] ?? '';
-                
-                if ($action === 'rebuild_cache') {
-                    $results = rebuildAllCaches($pdo);
-                    $api->answerCallbackQuery($data['callback_query']['id'], 'Cache rebuilt: ' . implode(', ', $results));
-                    $api->editMessageText($callbackChatId, $callbackMessageId, 'Cache rebuild complete: ' . json_encode($results));
+        try {
+            // Handle admin callbacks (strict type comparison for Telegram IDs)
+            if (in_array($callbackUserId, ADMIN_TELEGRAM_IDS, true)) {
+                if (strpos($callbackData, 'admin_') === 0) {
+                    // Handle admin actions
+                    $parts = explode('_', $callbackData);
+                    $action = $parts[1] ?? '';
+                    
+                    if ($action === 'rebuild_cache') {
+                        $results = rebuildAllCaches($pdo);
+                        $api->answerCallbackQuery($callbackId, 'Cache rebuilt: ' . implode(', ', $results));
+                        $api->editMessageText($callbackChatId, $callbackMessageId, 'Cache rebuild complete: ' . json_encode($results));
+                    }
                 }
             }
+            
+            // Always answer callback query to remove loading indicator
+            // Only if not already answered above
+            if (strpos($callbackData, 'admin_') !== 0 || !in_array($callbackUserId, ADMIN_TELEGRAM_IDS, true)) {
+                $api->answerCallbackQuery($callbackId);
+            }
+        } catch (Exception $e) {
+            $logger->error('Error handling callback query: ' . $e->getMessage());
         }
     }
     
