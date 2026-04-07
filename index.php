@@ -41,7 +41,7 @@ try {
             
             try {
                 $updates = $api->getUpdates(['offset' => $offset, 'timeout' => 30]);
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $logger->error('Error getting updates: ' . $e->getMessage());
                 sleep(5);
                 continue;
@@ -146,7 +146,7 @@ try {
                         // Answer callback query to remove loading state
                         $api->answerCallbackQuery($callback->getId());
                     }
-                } catch (Exception $e) {
+                } catch (\Exception $e) {
                     $logger->error('Error processing update ' . $u->getUpdateId() . ': ' . $e->getMessage());
                     // Continue processing other updates
                 }
@@ -161,7 +161,7 @@ try {
         }
         
     $logger->info('Bot stopped');
-} catch (Exception $e) {
+} catch (\Exception $e) {
     $logger->error('Fatal: ' . $e->getMessage());
     echo 'Fatal: ' . $e->getMessage() . PHP_EOL;
     exit(1);

@@ -56,7 +56,7 @@ try {
     echo "Cache results: " . json_encode($results) . "\n";
     echo "Badges awarded: {$badgeCount}\n";
     
-} catch (Exception $e) {
+} catch (\Exception $e) {
     $logger->error('Error in cron job: ' . $e->getMessage());
     echo "Error: " . $e->getMessage() . "\n";
     exit(1);

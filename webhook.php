@@ -99,13 +99,13 @@ try {
             if (strpos($callbackData, 'admin_') !== 0 || !in_array($callbackUserId, ADMIN_TELEGRAM_IDS, true)) {
                 $api->answerCallbackQuery($callbackId);
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $logger->error('Error handling callback query: ' . $e->getMessage());
         }
     }
     
     http_response_code(200);
-} catch (Exception $e) {
+} catch (\Exception $e) {
     $logger->error('Webhook error: ' . $e->getMessage());
     http_response_code(500);
     // Don't expose internal error details to clients

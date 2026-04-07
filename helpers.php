@@ -322,7 +322,7 @@ function sendBadgeNotificationBeforeAward($pdo, $telegramId, $badgeKey) {
     try {
         $api = new TelegramBot\Api\BotApi(TELEGRAM_BOT_TOKEN);
         $api->sendMessage($telegramId, $message);
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         // Ignore notification errors (user may have blocked bot)
     }
 }
@@ -467,7 +467,7 @@ function sendBadgeNotification($pdo, $telegramId, $badgeKey) {
     try {
         $api = new TelegramBot\Api\BotApi(TELEGRAM_BOT_TOKEN);
         $api->sendMessage($telegramId, $message);
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         // Ignore notification errors (user may have blocked bot)
     }
 }
@@ -503,7 +503,7 @@ function calculateStreak($pdo, $userId) {
                 break;
             }
         }
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         // Return 0 if date parsing fails
         return 0;
     }
@@ -963,7 +963,7 @@ function rebuildAllCaches($pdo) {
         try {
             $data = rebuildLeaderboardCache($pdo, $timeframe);
             $results[$timeframe] = 'success';
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $results[$timeframe] = 'error: ' . $e->getMessage();
         }
     }
