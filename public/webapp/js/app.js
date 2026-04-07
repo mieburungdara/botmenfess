@@ -18,8 +18,12 @@ const TelegramWebApp = {
     },
     
     getTheme() {
-        if (this.webApp) {
-            return this.webApp.colorScheme || 'light';
+        try {
+            if (this.webApp) {
+                return this.webApp.colorScheme || 'light';
+            }
+        } catch (e) {
+            // Ignore errors accessing webApp
         }
         return document.documentElement.getAttribute('data-theme') || 'light';
     },
@@ -30,16 +34,24 @@ const TelegramWebApp = {
     },
     
     getUserId() {
-        if (this.webApp && this.webApp.initDataUnsafe && this.webApp.initDataUnsafe.user) {
-            return this.webApp.initDataUnsafe.user.id;
+        try {
+            if (this.webApp && this.webApp.initDataUnsafe && this.webApp.initDataUnsafe.user) {
+                return this.webApp.initDataUnsafe.user.id;
+            }
+        } catch (e) {
+            // Ignore errors accessing webApp
         }
         return null;
     },
     
     getUserName() {
-        if (this.webApp && this.webApp.initDataUnsafe && this.webApp.initDataUnsafe.user) {
-            const user = this.webApp.initDataUnsafe.user;
-            return user.username ? `@${user.username}` : (user.first_name || 'User');
+        try {
+            if (this.webApp && this.webApp.initDataUnsafe && this.webApp.initDataUnsafe.user) {
+                const user = this.webApp.initDataUnsafe.user;
+                return user.username ? `@${user.username}` : (user.first_name || 'User');
+            }
+        } catch (e) {
+            // Ignore errors accessing webApp
         }
         return 'User';
     },
@@ -51,35 +63,55 @@ const TelegramWebApp = {
     },
     
     showMainButton(text, callback) {
-        if (this.webApp) {
-            this.webApp.MainButton.setText(text);
-            this.webApp.MainButton.show();
-            this.webApp.MainButton.onClick(callback);
+        try {
+            if (this.webApp && this.webApp.MainButton) {
+                this.webApp.MainButton.setText(text);
+                this.webApp.MainButton.show();
+                this.webApp.MainButton.onClick(callback);
+            }
+        } catch (e) {
+            // Ignore errors if MainButton not available
         }
     },
     
     hideMainButton() {
-        if (this.webApp && this.webApp.MainButton) {
-            this.webApp.MainButton.hide();
+        try {
+            if (this.webApp && this.webApp.MainButton) {
+                this.webApp.MainButton.hide();
+            }
+        } catch (e) {
+            // Ignore errors if MainButton not available
         }
     },
     
     showBackButton(callback) {
-        if (this.webApp) {
-            this.webApp.BackButton.show();
-            this.webApp.BackButton.onClick(callback);
+        try {
+            if (this.webApp && this.webApp.BackButton) {
+                this.webApp.BackButton.show();
+                this.webApp.BackButton.onClick(callback);
+            }
+        } catch (e) {
+            // Ignore errors if BackButton not available
         }
     },
     
     hideBackButton() {
-        if (this.webApp && this.webApp.BackButton) {
-            this.webApp.BackButton.hide();
+        try {
+            if (this.webApp && this.webApp.BackButton) {
+                this.webApp.BackButton.hide();
+            }
+        } catch (e) {
+            // Ignore errors if BackButton not available
         }
     },
     
     close() {
-        if (this.webApp) {
-            this.webApp.close();
+        try {
+            if (this.webApp) {
+                this.webApp.close();
+            }
+        } catch (e) {
+            // Ignore errors if close not available
         }
     }
 };
@@ -90,30 +122,62 @@ const TelegramWebApp = {
 
 const API = {
     baseURL: './api/',
+    timeout: 10000, // 10 second timeout
     
     async get(endpoint, params = {}) {
         const url = new URL(this.baseURL + endpoint, window.location.href);
         Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
         
-        const response = await fetch(url.toString());
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+        
+        try {
+            const response = await fetch(url.toString(), {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout. Please check your connection.');
+            }
+            throw error;
         }
-        return response.json();
     },
     
     async post(endpoint, data = {}) {
-        const response = await fetch(this.baseURL + endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+        
+        try {
+            const response = await fetch(this.baseURL + endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout. Please check your connection.');
+            }
+            throw error;
         }
-        return response.json();
     }
 };
 
