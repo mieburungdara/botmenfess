@@ -84,6 +84,12 @@ function renderCacheStatus(cacheStatus) {
     container.innerHTML = html;
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function renderRecentActivity(activity) {
     const container = document.getElementById('recent-activity');
     
@@ -92,22 +98,27 @@ function renderRecentActivity(activity) {
         return;
     }
     
+    const actionLabels = {
+        'created': 'Komentar baru',
+        'deleted': 'Komentar dihapus',
+        'shadow_banned': 'Shadow banned'
+    };
+    
     let html = '<ul class="activity-log">';
     
     activity.forEach(item => {
-        const actionLabels = {
-            'created': 'Komentar baru',
-            'deleted': 'Komentar dihapus',
-            'shadow_banned': 'Shadow banned'
-        };
+        const safeAction = escapeHtml(actionLabels[item.action] || item.action || 'Unknown');
+        const safeUsername = escapeHtml(item.username || 'Anonymous');
+        const safeCommentText = escapeHtml(item.comment_text?.substring(0, 50) || '');
+        const safeDate = escapeHtml(UI.formatDate(item.created_at));
         
         html += `
             <li>
-                <strong>${actionLabels[item.action] || item.action}</strong> oleh ${item.username || 'Anonymous'}
+                <strong>${safeAction}</strong> oleh ${safeUsername}
                 <br>
-                <span style="font-size:12px;color:var(--text-muted)">"${item.comment_text?.substring(0, 50) || ''}..."</span>
+                <span style="font-size:12px;color:var(--text-muted)">"${safeCommentText}..."</span>
                 <br>
-                <span class="timestamp">${UI.formatDate(item.created_at)}</span>
+                <span class="timestamp">${safeDate}</span>
             </li>
         `;
     });

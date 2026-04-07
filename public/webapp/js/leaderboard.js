@@ -108,21 +108,27 @@ function renderPersonalRank(rank) {
         return;
     }
     
+    // Sanitize values before rendering
+    const safeRank = parseInt(rank.rank) || 0;
+    const safeCommentCount = parseInt(rank.comment_count) || 0;
+    const safeCommentVelocity = escapeHtml(String(rank.comment_velocity || '0'));
+    const safeActiveHour = escapeHtml(UI.formatHour(rank.most_active_hour));
+    
     container.innerHTML = `
         <div class="personal-rank">
             <div class="rank-label">Posisi kamu</div>
-            <div class="rank-number">#${rank.rank}</div>
+            <div class="rank-number">#${safeRank}</div>
             <div class="stats">
                 <div class="stat">
-                    <div class="stat-value">${rank.comment_count}</div>
+                    <div class="stat-value">${safeCommentCount}</div>
                     <div class="stat-label">Komentar</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-value">${rank.comment_velocity}</div>
+                    <div class="stat-value">${safeCommentVelocity}</div>
                     <div class="stat-label">Per bulan</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-value">${UI.formatHour(rank.most_active_hour)}</div>
+                    <div class="stat-value">${safeActiveHour}</div>
                     <div class="stat-label">Paling Aktif</div>
                 </div>
             </div>

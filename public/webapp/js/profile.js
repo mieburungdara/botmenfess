@@ -33,37 +33,47 @@ async function loadProfile() {
 }
 
 function renderProfile(profile) {
-    // Render header
+    // Render header - all user content is escaped
+    const safeFirstName = escapeHtml(profile.user.first_name || 'User');
+    const safeUsername = profile.user.username ? escapeHtml(profile.user.username) : '';
+    const safeInitial = (profile.user.first_name || 'U').charAt(0).toUpperCase();
+    const safeJoinDate = escapeHtml(UI.formatDate(profile.user.first_seen));
+    
     const headerHtml = `
         <div class="profile-header">
-            <div class="profile-avatar">${(profile.user.first_name || 'U').charAt(0).toUpperCase()}</div>
-            <div class="profile-name">${escapeHtml(profile.user.first_name || 'User')}</div>
-            <div class="profile-username">${profile.user.username ? '@' + escapeHtml(profile.user.username) : ''}</div>
+            <div class="profile-avatar">${safeInitial}</div>
+            <div class="profile-name">${safeFirstName}</div>
+            <div class="profile-username">${safeUsername ? '@' + safeUsername : ''}</div>
             <div style="margin-top:8px;font-size:13px;color:var(--text-muted)">
-                Bergabung ${UI.formatDate(profile.user.first_seen)}
+                Bergabung ${safeJoinDate}
             </div>
         </div>
     `;
     document.getElementById('profile-header').innerHTML = headerHtml;
     
-    // Render personal rank
+    // Render personal rank - all values are numeric or from trusted API
     if (profile.personal_rank) {
         const rank = profile.personal_rank;
+        const safeRank = parseInt(rank.rank) || 0;
+        const safeCommentCount = parseInt(rank.comment_count) || 0;
+        const safeCommentVelocity = escapeHtml(String(rank.comment_velocity || '0'));
+        const safeActiveHour = escapeHtml(UI.formatHour(rank.most_active_hour));
+        
         document.getElementById('personal-rank').innerHTML = `
             <div class="personal-rank">
                 <div class="rank-label">Posisi kamu di leaderboard</div>
-                <div class="rank-number">#${rank.rank}</div>
+                <div class="rank-number">#${safeRank}</div>
                 <div class="stats">
                     <div class="stat">
-                        <div class="stat-value">${rank.comment_count}</div>
+                        <div class="stat-value">${safeCommentCount}</div>
                         <div class="stat-label">Komentar</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value">${rank.comment_velocity}</div>
+                        <div class="stat-value">${safeCommentVelocity}</div>
                         <div class="stat-label">Per bulan</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value">${UI.formatHour(rank.most_active_hour)}</div>
+                        <div class="stat-value">${safeActiveHour}</div>
                         <div class="stat-label">Paling Aktif</div>
                     </div>
                 </div>
