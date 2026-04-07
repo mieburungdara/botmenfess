@@ -11,7 +11,7 @@ class UserTier {
     }
 
     public function getCurrentTier($uid) {
-        $sql = 'SELECT t.* FROM tiers t INNER JOIN ' . $this->table . ' ut ON t.id = ut.tier_id WHERE ut.user_id = ? AND ut.is_active = 1 AND (ut.expires_at IS NULL OR ut.expires_at > NOW()) ORDER BY ut.started_at DESC LIMIT 1';
+        $sql = 'SELECT t.* FROM tiers t INNER JOIN ' . $this->table . ' ut ON t.id = ut.tier_id INNER JOIN users u ON ut.user_id = u.id WHERE u.telegram_id = ? AND ut.is_active = 1 AND (ut.expires_at IS NULL OR ut.expires_at > NOW()) ORDER BY ut.started_at DESC LIMIT 1';
         $s = $this->db->prepare($sql);
         $s->execute([$uid]);
         return $s->fetch(\PDO::FETCH_ASSOC);

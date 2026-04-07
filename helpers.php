@@ -6,14 +6,14 @@
 
 // Get user tier info
 function menfessGetUserTier($pdo, $uid) {
-    $stmt = $pdo->prepare('SELECT t.name, t.daily_limit FROM user_tiers ut INNER JOIN tiers t ON ut.tier_id = t.id WHERE ut.user_id = ? AND ut.is_active = 1 AND (ut.expires_at IS NULL OR ut.expires_at > NOW()) ORDER BY ut.started_at DESC LIMIT 1');
+    $stmt = $pdo->prepare('SELECT t.name, t.daily_limit FROM user_tiers ut INNER JOIN tiers t ON ut.tier_id = t.id INNER JOIN users u ON ut.user_id = u.id WHERE u.telegram_id = ? AND ut.is_active = 1 AND (ut.expires_at IS NULL OR ut.expires_at > NOW()) ORDER BY ut.started_at DESC LIMIT 1');
     $stmt->execute([$uid]);
     return $stmt->fetch() ?: ['name' => 'free', 'daily_limit' => 3];
 }
 
-// Get today usage count (BUG 1 FIX: safe fetch)
+// Get today usage count
 function menfessGetTodayUsage($pdo, $uid) {
-    $stmt = $pdo->prepare('SELECT count FROM daily_usage WHERE user_id = ? AND usage_date = CURDATE()');
+    $stmt = $pdo->prepare('SELECT count FROM daily_usage du INNER JOIN users u ON du.user_id = u.id WHERE u.telegram_id = ? AND du.usage_date = CURDATE()');
     $stmt->execute([$uid]);
     $row = $stmt->fetch();
     return $row ? (int)$row['count'] : 0;
@@ -36,8 +36,8 @@ function menfessCheckLimit($pdo, $api, $cid, $uid) {
 
 // Record submission usage
 function menfessRecordUsage($pdo, $uid) {
-    $stmt = $pdo->prepare('INSERT INTO daily_usage (user_id, usage_date, count) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE count = count + 1');
-    $stmt->execute([$uid, date('Y-m-d')]);
+    $stmt = $pdo->prepare('INSERT INTO daily_usage (user_id, usage_date, count) SELECT id, CURDATE(), 1 FROM users WHERE telegram_id = ? ON DUPLICATE KEY UPDATE count = count + 1');
+    $stmt->execute([$uid]);
 }
 
 function menfessHandleStatus($api, $cid, $uid, $pdo) {

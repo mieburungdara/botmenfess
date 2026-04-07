@@ -11,19 +11,17 @@ class DailyUsage {
     }
 
     public function getTodayCount($uid) {
-        $today = date('Y-m-d');
-        $sql = 'SELECT count FROM ' . $this->table . ' WHERE user_id = ? AND usage_date = ?';
+        $sql = 'SELECT count FROM ' . $this->table . ' du INNER JOIN users u ON du.user_id = u.id WHERE u.telegram_id = ? AND du.usage_date = CURDATE()';
         $s = $this->db->prepare($sql);
-        $s->execute([$uid, $today]);
+        $s->execute([$uid]);
         $r = $s->fetch(\PDO::FETCH_ASSOC);
         return $r ? (int)$r['count'] : 0;
     }
 
     public function increment($uid) {
-        $today = date('Y-m-d');
-        $sql = 'INSERT INTO ' . $this->table . ' (user_id, usage_date, count) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE count = count + 1';
+        $sql = 'INSERT INTO ' . $this->table . ' (user_id, usage_date, count) SELECT id, CURDATE(), 1 FROM users WHERE telegram_id = ? ON DUPLICATE KEY UPDATE count = count + 1';
         $s = $this->db->prepare($sql);
-        return $s->execute([$uid, $today]);
+        return $s->execute([$uid]);
     }
 
     public function getRemaining($uid, $lim) {

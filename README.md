@@ -38,15 +38,15 @@ Users are assigned to tiers that determine how many menfess they can submit per 
 
 ### 1. Install Dependencies
 
-`ash
+```bash
 composer install
-`
+```
 
 ### 2. Configure Environment
 
 Copy .env.example to .env and edit the values:
 
-`env
+```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TARGET_CHANNEL_ID=your_target_channel_id_here
 DB_HOST=localhost
@@ -57,19 +57,19 @@ WEBHOOK_URL=https://yourdomain.com/botmenfess
 USE_WEBHOOK=false
 ADMIN_TELEGRAM_IDS=
 POST_INTERVAL_MINUTES=1
-`
+```
 
 ### 3. Setup Database
 
-`ash
+```bash
 mysql -u root -p < database_schema.sql
-`
+```
 
 This creates the following tables:
 - users - User analytics (NOT linked to submissions for anonymity)
 - submissions - Incoming messages with status tracking
 - channel_posts - Tracks posted submissions
-- **	iers** - Tier definitions (free, silver, gold, unlimited)
+- **tiers** - Tier definitions (free, silver, gold, unlimited)
 - **user_tiers** - Maps users to their subscribed tier
 - **daily_usage** - Tracks daily submission counts per user
 
@@ -82,9 +82,9 @@ This creates the following tables:
 ### 5. Run the Bot
 
 **Polling mode (development):**
-`ash
+```bash
 php index.php
-`
+```
 
 **Webhook mode (production):**
 1. Set USE_WEBHOOK=true in .env
@@ -103,16 +103,16 @@ php index.php
 
 Tiers are managed directly in the database:
 
-`sql
+```sql
 INSERT INTO user_tiers (user_id, tier_id, expires_at)
 VALUES (1, 2, NOW() + INTERVAL 1 MONTH);
-`
+```
 
-Where 	ier_id corresponds to the 	iers table (1=free, 2=silver, 3=gold, 4=unlimited).
+Where tier_id corresponds to the tiers table (1=free, 2=silver, 3=gold, 4=unlimited).
 
 ## Project Structure
 
-`
+```
 botmenfess/
 ├── index.php             # Entry point (polling mode)
 ├── webhook.php           # Entry point (webhook mode)
@@ -131,7 +131,7 @@ botmenfess/
 │       └── MonetizationService.php  # Core monetization logic
 └── logs/
     └── bot.log
-`
+```
 
 ## Tech Stack
 
