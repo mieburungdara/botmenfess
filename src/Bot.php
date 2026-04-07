@@ -491,7 +491,7 @@ class MenfessBot
     }
     
     /**
-     * Process auto-approval queue
+     * Process auto-approval queue with proper locking to prevent race conditions
      */
     private function processAutoApprovalQueue()
     {
@@ -501,12 +501,20 @@ class MenfessBot
             return; // Not enough time has passed, wait for next cycle
         }
         
-        // Find the oldest pending submission
-        $stmt = $this->pdo->prepare("SELECT id, message_text FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC LIMIT 1");
-        $stmt->execute();
-        $submission = $stmt->fetch();
-        
-        if ($submission) {
+        // Use a transaction with SELECT FOR UPDATE to prevent race conditions
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Find the oldest pending submission with row-level locking
+            $stmt = $this->pdo->prepare("SELECT id, message_text FROM submissions WHERE status = 'pending' ORDER BY submitted_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED");
+            $stmt->execute();
+            $submission = $stmt->fetch();
+            
+            if (!$submission) {
+                $this->pdo->rollBack();
+                return; // No pending submissions
+            }
+            
             $submissionId = (int)$submission['id'];
             $messageText = $submission['message_text'];
             
@@ -516,7 +524,9 @@ class MenfessBot
             $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'approved', reviewed_at = NOW(), reviewed_by = 'auto-approval' WHERE id = ?");
             $stmt->execute([$submissionId]);
             
-            // Post to Telegram channel
+            $this->pdo->commit();
+            
+            // Post to Telegram channel (outside transaction to avoid holding lock)
             try {
                 $result = $this->botApi->sendMessage($this->targetChannelId, $messageText);
                 
@@ -541,6 +551,12 @@ class MenfessBot
                 $stmt = $this->pdo->prepare("UPDATE submissions SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ?");
                 $stmt->execute([$submissionId]);
             }
+        } catch (\Exception $e) {
+            // Rollback transaction on any error
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            $this->logger->error("Error in auto-approval queue: " . $e->getMessage());
         }
     }
 }
