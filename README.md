@@ -1,113 +1,149 @@
 # Telegram Menfess Bot
 
-Implementation of a Telegram-based menfess (anonymous confession) system as outlined in the plan.
+Telegram-based anonymous confession (menfess) bot with **tier-based daily submission limits** for monetization.
 
 ## Features
 
 - Anonymous message submission via Telegram bot
+- **Tier-based daily submission limits** (monetization)
 - Admin approval workflow for content moderation
 - Automatic posting to Telegram channel upon approval
-- MySQL database storage with InnoDB engine
+- MySQL database with InnoDB engine
 - Logging and error handling
 - Command interface for users and administrators
-- Webhook support for production deployments
-- Automatic queuing with 1-minute interval between posts
-- User notifications with queue position and estimated wait time
+- Webhook and polling mode support
+- Queue system with configurable posting interval
+
+## Tier System
+
+Users are assigned to tiers that determine how many menfess they can submit per day:
+
+| Tier | Limit/Hari | Harga |
+|------|-----------|-------|
+| **free** | 3 | Gratis |
+| **silver** | 10 | Rp 15.000/bln |
+| **gold** | 30 | Rp 30.000/bln |
+| **unlimited** | Tidak terbatas | Rp 50.000/bln |
+
+### User Commands
+
+| Command | Deskripsi |
+|---------|-----------|
+| /start | Mulai bot dan lihat info tier |
+| /help | Panduan penggunaan |
+| /status | Lihat sisa limit menfess hari ini |
+| /tiers | Lihat daftar tier yang tersedia |
 
 ## Setup
 
-1. Install dependencies:
-   ```bash
-   composer install
-   ```
+### 1. Install Dependencies
 
-2. Create a `.env` file based on the example:
-   ```env
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   TARGET_CHANNEL_ID=your_target_channel_id_here
-   DB_HOST=localhost
-   DB_NAME=menfess_bot
-   DB_USERNAME=root
-   DB_PASSWORD=
-   WEBHOOK_URL=https://yourdomain.com/botmenfess  # Required for webhook mode
-   USE_WEBHOOK=true  # Set to true for webhook mode, false for polling mode
-   ```
+`ash
+composer install
+`
 
-3. Set up the database:
-   ```bash
-   mysql -u root -p < database_schema.sql
-   ```
+### 2. Configure Environment
 
-4. Configure your Telegram bot:
-   - Create a bot via @BotFather
-   - Get the API token
-   - Add the bot as an administrator to your target channel
-   - Get the channel ID (can be obtained by forwarding a message from the channel to @userinfobot)
+Copy .env.example to .env and edit the values:
 
-5. Run the bot:
-   - For development/polling mode:
-     ```bash
-     php index.php
-     ```
-   - For production/webhook mode:
-     ```bash
-     php index.php  # This will set up the webhook
-     ```
-     Then configure your web server to route requests to `webhook.php`
+`env
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TARGET_CHANNEL_ID=your_target_channel_id_here
+DB_HOST=localhost
+DB_NAME=menfess_bot
+DB_USERNAME=root
+DB_PASSWORD=
+WEBHOOK_URL=https://yourdomain.com/botmenfess
+USE_WEBHOOK=false
+ADMIN_TELEGRAM_IDS=
+POST_INTERVAL_MINUTES=1
+`
 
-## Usage
+### 3. Setup Database
 
-Users interact with the bot via private messages:
-- Send any message to submit an anonymous confession
-- Use `/start` for welcome message
-- Use `/help` for usage instructions
-- Use `/status` to see submission statistics
+`ash
+mysql -u root -p < database_schema.sql
+`
 
-The bot now provides users with:
-- Their position in the queue
-- Estimated time until their menfess will be posted
-- Confirmation that their message has been received
+This creates the following tables:
+- users - User analytics (NOT linked to submissions for anonymity)
+- submissions - Incoming messages with status tracking
+- channel_posts - Tracks posted submissions
+- **	iers** - Tier definitions (free, silver, gold, unlimited)
+- **user_tiers** - Maps users to their subscribed tier
+- **daily_usage** - Tracks daily submission counts per user
 
-Administrators can moderate submissions through the bot interface (implementation would need to be extended for admin commands).
+### 4. Configure Telegram Bot
 
-## Database Schema
+- Create a bot via @BotFather and get the API token
+- Add the bot as administrator to your target channel
+- Get the channel ID (forward a message from the channel to @userinfobot)
 
-The bot uses three tables:
-- `users`: Stores information about users who interact with the bot (for analytics only)
-- `submissions`: Stores incoming messages with status tracking
-- `channel_posts`: Tracks which submissions have been posted to the channel
+### 5. Run the Bot
 
-**Important Note on User Anonymity**: While the bot stores user information in the `users` table for analytics purposes, this data is **NOT** linked to submissions. The `submissions` table contains only the message text and metadata, ensuring complete anonymity of menfess posts.
+**Polling mode (development):**
+`ash
+php index.php
+`
 
-All tables use the InnoDB engine for ACID compliance and foreign key support.
+**Webhook mode (production):**
+1. Set USE_WEBHOOK=true in .env
+2. Configure your web server to route to webhook.php
+3. Ensure HTTPS with valid SSL certificate
 
-## Implementation Details
+## How the Limit System Works
 
-Built with:
+1. When a user sends a menfess, the bot checks their **tier** from user_tiers
+2. The bot queries daily_usage for today's submission count
+3. If count >= daily_limit the submission is rejected with a message to upgrade
+4. If within limit, the submission is stored and daily_usage.count is incremented
+5. Users can check their remaining limit anytime with /status
+
+### Assigning Tiers (Admin)
+
+Tiers are managed directly in the database:
+
+`sql
+INSERT INTO user_tiers (user_id, tier_id, expires_at)
+VALUES (1, 2, NOW() + INTERVAL 1 MONTH);
+`
+
+Where 	ier_id corresponds to the 	iers table (1=free, 2=silver, 3=gold, 4=unlimited).
+
+## Project Structure
+
+`
+botmenfess/
+├── index.php             # Entry point (polling mode)
+├── webhook.php           # Entry point (webhook mode)
+├── config.php            # Configuration constants
+├── database_schema.sql    # Database schema + tier seed data
+├── .env.example          # Environment template
+├── composer.json
+├── src/
+│   ├── Bot.php           # Original bot class
+│   ├── Database.php      # PDO wrapper
+│   ├── Models/
+│   │   ├── Tier.php        # Tier model
+│   │   ├── DailyUsage.php  # Daily usage tracking
+│   │   └── UserTier.php    # User-tier relationship
+│   └── Services/
+│       └── MonetizationService.php  # Core monetization logic
+└── logs/
+    └── bot.log
+`
+
+## Tech Stack
+
 - PHP 7.4+
-- telegram-bot/api library for Telegram Bot API integration
-- MySQL with InnoDB engine for data storage
-- Monolog for logging
-- vlucas/phpdotenv for environment variable management
+- telegram-bot/api - Telegram Bot API
+- Doctrine DBAL - Database abstraction
+- Monolog - Logging
+- vlucas/phpdotenv - Environment variables
+- MySQL (InnoDB) - Data storage
 
-The implementation follows the workflow outlined in the plan with enhancements:
-1. User sends message to bot
-2. Bot stores message in database with 'pending' status and calculates queue position
-3. Bot informs user of their queue position and estimated wait time
-4. After 1 minute intervals (adjusted for queue), bot automatically approves and posts the oldest pending submission
-5. Posted submission is recorded in channel_posts table
-6. Bot maintains anonymity by not storing or revealing user information
+## Anonymity Guarantee
 
-## Webhook Setup
-
-For production use, it's recommended to use webhooks instead of polling:
-
-1. Set `USE_WEBHOOK=true` in your `.env` file
-2. Set `WEBHOOK_URL` to your domain where the bot is hosted (without the webhook.php path)
-3. Run `php index.php` once to set up the webhook with Telegram
-4. Configure your web server to route HTTPS requests to `/webhook.php` to this script
-5. Ensure your server has a valid SSL certificate (Telegram requires HTTPS for webhooks)
-
-Example webhook URL structure:
-- WEBHOOK_URL: https://example.com/botmenfess
-- Telegram will send updates to: https://example.com/botmenfess/webhook.php
+User personal data (stored in users table) is **NEVER** linked to submissions.
+The submissions table only contains message text and metadata, ensuring complete
+anonymity of all menfess posts regardless of the sender's tier.

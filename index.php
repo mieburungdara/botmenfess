@@ -1,19 +1,52 @@
 <?php
-require __DIR__ . '/src/Bot.php';
-
-$bot = new MenfessBot();
-
-// Check if we should use webhook mode or getUpdates mode
-if (isset($_ENV['USE_WEBHOOK']) && $_ENV['USE_WEBHOOK'] === 'true') {
-    // Webhook mode - just set up the webhook and exit
-    // The actual webhook processing will happen in webhook.php
-    if ($bot->setWebhook()) {
-        echo "Webhook set successfully. Bot is ready to receive updates via webhook.\n";
-    } else {
-        echo "Failed to set webhook. Check your WEBHOOK_URL environment variable.\n";
-        exit(1);
+/**
+ * Polling mode entry point for Menfess Bot
+ * Run: php index.php
+ */
+require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/helpers.php';
+use TelegramBot\Api\BotApi;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+if (!is_dir(dirname(LOG_FILE))) mkdir(dirname(LOG_FILE), 0755, true);
+$logger = new Logger('menfess_bot');
+$logger->pushHandler(new StreamHandler(LOG_FILE, Logger::INFO));
+$running = true;
+pcntl_signal(SIGINT, function () use (&$running, $logger) { $logger->info('SIGINT shutdown'); $running = false; });
+pcntl_signal(SIGTERM, function () use (&$running, $logger) { $logger->info('SIGTERM shutdown'); $running = false; });
+pcntl_async_signals(true);
+try {
+    $api = new BotApi(TELEGRAM_BOT_TOKEN);
+    $pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $logger->info('Bot starting');
+    $offset = 0;
+    while ($running) {
+        pcntl_signal_dispatch();
+        $updates = $api->getUpdates(['offset' => $offset, 'timeout' => 30]);
+        foreach ($updates as $u) {
+            $offset = $u->getUpdateId() + 1;
+            if (!$u->getMessage()) continue;
+            $msg = $u->getMessage();
+            $cid = $msg->getChat()->getId();
+            $txt = $msg->getText() ?? '';
+            $uid = $msg->getFrom()->getId();
+            if (strpos($txt, '/') === 0) {
+                $cmd = strtolower($txt);
+                if ($cmd === '/help' || $cmd === '/start') {
+                    $api->sendMessage($cid, "Panduan:\n\n/status - Lihat sisa limit\n/tiers - Lihat tier\n\nKirim pesan untuk membuat menfess.");
+                } elseif ($cmd === '/status') menfessHandleStatus($api, $cid, $uid, $pdo);
+                elseif ($cmd === '/tiers') menfessHandleTiers($api, $cid, $pdo);
+                else $api->sendMessage($cid, 'Perintah tidak dikenali. Ketik /help.');
+            } else menfessHandleSubmit($api, $cid, $uid, $txt, $pdo);
+        }
+        usleep(200000);
     }
-} else {
-    // getUpdates mode - traditional polling
-    $bot->start();
+    $logger->info('Bot stopped');
+} catch (Exception $e) {
+    $logger->error('Fatal: ' . $e->getMessage());
+    echo 'Fatal: ' . $e->getMessage() . '\n';
+    exit(1);
 }
