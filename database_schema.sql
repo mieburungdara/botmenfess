@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS channel_posts (
 -- Indexes for performance
 CREATE INDEX idx_submissions_status ON submissions(status);
 CREATE INDEX idx_submissions_submitted_at ON submissions(submitted_at);
+CREATE INDEX idx_submissions_status_submitted ON submissions(status, submitted_at);
 
 -- ============================================
 -- COMMENTS TABLE
@@ -169,6 +170,10 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS shadow_banned_at TIMESTAMP NULL,
     ADD COLUMN IF NOT EXISTS shadow_banned_by VARCHAR(255) NULL,
     ADD COLUMN IF NOT EXISTS last_badge_notification_sent VARCHAR(50) NULL;
+
+-- Add indexes for shadow ban queries performance
+CREATE INDEX idx_users_shadow_banned ON users(is_shadow_banned);
+CREATE INDEX idx_users_telegram ON users(telegram_id);
 
 -- Seed default tiers
 INSERT INTO tiers (name, daily_limit, description, price) VALUES
