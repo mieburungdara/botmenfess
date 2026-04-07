@@ -34,7 +34,7 @@ try {
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => 'Internal server error',
-        'message' => $e->getMessage()
+        'error' => 'Internal server error'
+        // Don't expose internal error details in production
     ]);
 }
