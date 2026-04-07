@@ -82,10 +82,20 @@ function renderProfile(profile) {
     }
     
     // Render stats
-    const stats = profile.stats;
-    document.getElementById('total-comments').textContent = stats.total_comments || 0;
-    document.getElementById('comment-velocity').textContent = stats.comment_velocity || 0;
-    document.getElementById('streak').textContent = (stats.streak || 0) + ' hari';
+    const stats = profile.stats || {};
+    const totalCommentsEl = document.getElementById('total-comments');
+    const commentVelocityEl = document.getElementById('comment-velocity');
+    const streakEl = document.getElementById('streak');
+    
+    if (totalCommentsEl) {
+        totalCommentsEl.textContent = stats.total_comments || 0;
+    }
+    if (commentVelocityEl) {
+        commentVelocityEl.textContent = stats.comment_velocity || 0;
+    }
+    if (streakEl) {
+        streakEl.textContent = (stats.streak || 0) + ' hari';
+    }
     
     // Render badges
     renderBadges(profile.badges || []);
@@ -102,6 +112,7 @@ function renderProfile(profile) {
 
 function renderBadges(badges) {
     const container = document.getElementById('badges-container');
+    if (!container) return;
     
     if (badges.length === 0) {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">Belum ada badge. Mulai berkomentar untuk mendapatkan badge!</div>';
@@ -112,10 +123,13 @@ function renderBadges(badges) {
     
     badges.forEach(badge => {
         const badgeInfo = BADGES[badge.badge_key] || {};
+        const safeDescription = escapeHtml(badgeInfo.description || badge.badge_key);
+        const safeIcon = badgeInfo.icon || '🏅';
+        const safeName = escapeHtml(badgeInfo.name || badge.badge_key);
         html += `
-            <div class="badge-item badge-earned" title="${badgeInfo.description || badge.badge_key}">
-                <span class="badge-icon">${badgeInfo.icon || '🏅'}</span>
-                <div class="badge-name">${badgeInfo.name || badge.badge_key}</div>
+            <div class="badge-item badge-earned" title="${safeDescription}">
+                <span class="badge-icon">${safeIcon}</span>
+                <div class="badge-name">${safeName}</div>
             </div>
         `;
     });

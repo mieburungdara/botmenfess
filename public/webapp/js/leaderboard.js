@@ -32,8 +32,11 @@ async function loadLeaderboard(timeframe = 'alltime') {
         renderStats(response.stats);
         
         // Update timestamp
-        document.getElementById('last-updated').textContent = 
-            'Terakhir diperbarui: ' + new Date(response.generated_at).toLocaleString('id-ID');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        if (lastUpdatedEl && response.generated_at) {
+            lastUpdatedEl.textContent = 
+                'Terakhir diperbarui: ' + new Date(response.generated_at).toLocaleString('id-ID');
+        }
         
     } catch (error) {
         console.error('Error loading leaderboard:', error);
@@ -98,7 +101,7 @@ function renderLeaderboard(data) {
 function renderPersonalRank(rank) {
     const container = document.getElementById('personal-rank');
     
-    if (!rank || rank.comment_count === 0) {
+    if (!rank || !rank.comment_count || rank.comment_count === 0) {
         container.innerHTML = `
             <div class="personal-rank" style="text-align:center">
                 <div class="rank-label">Kamu belum memiliki komentar</div>
@@ -137,9 +140,19 @@ function renderPersonalRank(rank) {
 }
 
 function renderStats(stats) {
-    document.getElementById('total-comments').textContent = UI.formatNumber(stats.total_comments || 0);
-    document.getElementById('total-commenters').textContent = UI.formatNumber(stats.total_commenters || 0);
-    document.getElementById('total-submissions').textContent = UI.formatNumber(stats.total_submissions || 0);
+    const totalCommentsEl = document.getElementById('total-comments');
+    const totalCommentersEl = document.getElementById('total-commenters');
+    const totalSubmissionsEl = document.getElementById('total-submissions');
+    
+    if (totalCommentsEl) {
+        totalCommentsEl.textContent = UI.formatNumber(stats?.total_comments || 0);
+    }
+    if (totalCommentersEl) {
+        totalCommentersEl.textContent = UI.formatNumber(stats?.total_commenters || 0);
+    }
+    if (totalSubmissionsEl) {
+        totalSubmissionsEl.textContent = UI.formatNumber(stats?.total_submissions || 0);
+    }
 }
 
 function switchTab(timeframe) {

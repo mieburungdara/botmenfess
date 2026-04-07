@@ -33,12 +33,14 @@ async function loadAdminStats() {
 }
 
 function renderAdminStats(stats) {
-    // Render overview stats
-    document.getElementById('total-users').textContent = stats.total_users || 0;
-    document.getElementById('shadow-banned').textContent = stats.shadow_banned_users || 0;
-    document.getElementById('total-comments').textContent = UI.formatNumber(stats.total_comments || 0);
-    document.getElementById('total-submissions').textContent = UI.formatNumber(stats.total_submissions || 0);
-    document.getElementById('comments-today').textContent = stats.comments_today || 0;
+    // Render overview stats with null checks
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    
+    setEl('total-users', stats.total_users || 0);
+    setEl('shadow-banned', stats.shadow_banned_users || 0);
+    setEl('total-comments', UI.formatNumber(stats.total_comments || 0));
+    setEl('total-submissions', UI.formatNumber(stats.total_submissions || 0));
+    setEl('comments-today', stats.comments_today || 0);
     
     // Render cache status
     renderCacheStatus(stats.cache_status || []);
@@ -59,21 +61,28 @@ function renderCacheStatus(cacheStatus) {
     html += '<div class="card-title">Status Cache Leaderboard</div>';
     
     cacheStatus.forEach(cache => {
-        const generatedAt = new Date(cache.generated_at);
+        const safeTimeframe = escapeHtml(cache.timeframe || 'unknown');
+        let generatedAt;
+        try {
+            generatedAt = new Date(cache.generated_at);
+        } catch (e) {
+            generatedAt = new Date();
+        }
         const now = new Date();
         const hoursOld = (now - generatedAt) / (1000 * 60 * 60);
         const isExpired = hoursOld >= 24;
+        const hoursDisplay = isNaN(hoursOld) ? '?' : Math.round(hoursOld);
         
         html += `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-color)">
                 <div>
-                    <strong>${cache.timeframe}</strong>
+                    <strong>${safeTimeframe}</strong>
                     <div style="font-size:12px;color:var(--text-muted)">${generatedAt.toLocaleString('id-ID')}</div>
                 </div>
                 <div>
                     ${isExpired ? 
                         '<span style="color:var(--error-color)">Expired</span>' : 
-                        `<span style="color:var(--success-color)">${Math.round(hoursOld)} jam lalu</span>`
+                        `<span style="color:var(--success-color)">${hoursDisplay} jam lalu</span>`
                     }
                 </div>
             </div>
