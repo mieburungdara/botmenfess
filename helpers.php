@@ -488,19 +488,24 @@ function calculateStreak($pdo, $userId) {
     }
     
     $streak = 1;
-    $currentDate = new DateTime($dates[0]);
-    
-    for ($i = 1; $i < count($dates); $i++) {
-        $prevDate = new DateTime($dates[$i]);
-        $diff = $currentDate->diff($prevDate);
+    try {
+        $currentDate = new DateTime($dates[0]);
         
-        // Allow 1-day gap (diff == 1 means consecutive days)
-        if ($diff->days == 1) {
-            $streak++;
-            $currentDate = $prevDate;
-        } else {
-            break;
+        for ($i = 1; $i < count($dates); $i++) {
+            $prevDate = new DateTime($dates[$i]);
+            $diff = $currentDate->diff($prevDate);
+            
+            // Allow 1-day gap (diff == 1 means consecutive days)
+            if ($diff->days == 1) {
+                $streak++;
+                $currentDate = $prevDate;
+            } else {
+                break;
+            }
         }
+    } catch (Exception $e) {
+        // Return 0 if date parsing fails
+        return 0;
     }
     
     return $streak;
@@ -555,6 +560,14 @@ function rebuildLeaderboardCache($pdo, $timeframe, $limit = LEADERBOARD_DEFAULT_
 
 // Generate leaderboard data from database
 function generateLeaderboardData($pdo, $timeframe, $limit) {
+    // Validate timeframe
+    if (!in_array($timeframe, ['weekly', 'monthly', 'alltime'])) {
+        $timeframe = 'alltime';
+    }
+    
+    // Validate and sanitize limit
+    $limit = max(1, min(100, (int)$limit));
+    
     // Build date filter
     $dateFilter = '';
     switch ($timeframe) {
@@ -597,6 +610,16 @@ function generateLeaderboardData($pdo, $timeframe, $limit) {
     ");
     $stmt->execute([$limit]);
     $users = $stmt->fetchAll();
+    
+    // Defensive: handle empty results
+    if (empty($users)) {
+        return [
+            'timeframe' => $timeframe,
+            'leaderboard' => [],
+            'stats' => getOverallStats($pdo, $timeframe),
+            'generated_at' => date('Y-m-d H:i:s')
+        ];
+    }
     
     // Get previous ranks for trend calculation
     $prevRanks = getPreviousRanks($pdo, $timeframe);
@@ -796,6 +819,11 @@ function getUserProfile($pdo, $telegramId) {
     if (!$user) {
         return null;
     }
+    
+    // Defensive: ensure required fields exist
+    $user['username'] = $user['username'] ?? null;
+    $user['first_name'] = $user['first_name'] ?? 'User';
+    $user['first_seen'] = $user['first_seen'] ?? date('Y-m-d H:i:s');
     
     // Get comment stats
     $stmt = $pdo->prepare('SELECT COUNT(*) as total FROM comments WHERE user_id = ?');
@@ -1101,6 +1129,11 @@ function getCommentsInHourRange($pdo, $userId, $startHour, $endHour) {
  * Check if user has a burst of N comments within X seconds
  */
 function hasCommentBurst($pdo, $userId, $minComments, $timeWindow) {
+    // Validate inputs
+    if ($minComments < 2 || $timeWindow < 1) {
+        return false;
+    }
+    
     // Get recent comments
     $stmt = $pdo->prepare('
         SELECT created_at FROM comments 
@@ -1119,6 +1152,11 @@ function hasCommentBurst($pdo, $userId, $minComments, $timeWindow) {
     for ($i = 0; $i <= count($comments) - $minComments; $i++) {
         $startTime = strtotime($comments[$i]['created_at']);
         $endTime = strtotime($comments[$i + $minComments - 1]['created_at']);
+        
+        // Validate timestamps
+        if ($startTime === false || $endTime === false) {
+            continue;
+        }
         
         if (($startTime - $endTime) <= $timeWindow) {
             return true;
